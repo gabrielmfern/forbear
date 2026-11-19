@@ -34,125 +34,7 @@ typedef unsigned long long fb_u64;
 // ====== BEGIN AUTO GENERATED PORTION ======
 #if defined(_WIN32)
 typedef struct { fb_s64 count; fb_u8 *data; } fb_String;
-typedef struct fb_Vector3 fb_Vector3;
-struct fb_Vector3 {
-    float x;
-    float y;
-    float z;
-};
-_Static_assert(sizeof(fb_Vector3) == 12, "fb_Vector3");
-_Static_assert(FB_OFFSETOF(fb_Vector3, x) == 0, "fb_Vector3.x");
-_Static_assert(FB_OFFSETOF(fb_Vector3, y) == 4, "fb_Vector3.y");
-_Static_assert(FB_OFFSETOF(fb_Vector3, z) == 8, "fb_Vector3.z");
-
-typedef struct fb_Scrolling_State fb_Scrolling_State;
-typedef struct fb_Vector2 fb_Vector2;
-struct fb_Vector2 {
-    float x;
-    float y;
-};
-_Static_assert(sizeof(fb_Vector2) == 8, "fb_Vector2");
-_Static_assert(FB_OFFSETOF(fb_Vector2, x) == 0, "fb_Vector2.x");
-_Static_assert(FB_OFFSETOF(fb_Vector2, y) == 4, "fb_Vector2.y");
-
-typedef struct fb_Scheduled_Scroll fb_Scheduled_Scroll;
-struct fb_Scheduled_Scroll {
-    _Bool defined;
-    _Bool defined_this_frame;
-    fb_Vector2 position;
-    _Bool animate;
-};
-_Static_assert(sizeof(fb_Scheduled_Scroll) == 16, "fb_Scheduled_Scroll");
-_Static_assert(FB_OFFSETOF(fb_Scheduled_Scroll, defined) == 0, "fb_Scheduled_Scroll.defined");
-_Static_assert(FB_OFFSETOF(fb_Scheduled_Scroll, defined_this_frame) == 1, "fb_Scheduled_Scroll.defined_this_frame");
-_Static_assert(FB_OFFSETOF(fb_Scheduled_Scroll, position) == 4, "fb_Scheduled_Scroll.position");
-_Static_assert(FB_OFFSETOF(fb_Scheduled_Scroll, animate) == 12, "fb_Scheduled_Scroll.animate");
-
-struct fb_Scrolling_State {
-    fb_Vector2 offset;
-    fb_Vector2 effective_offset;
-    fb_Scheduled_Scroll scheduled_scroll;
-};
-_Static_assert(sizeof(fb_Scrolling_State) == 32, "fb_Scrolling_State");
-_Static_assert(FB_OFFSETOF(fb_Scrolling_State, offset) == 0, "fb_Scrolling_State.offset");
-_Static_assert(FB_OFFSETOF(fb_Scrolling_State, effective_offset) == 8, "fb_Scrolling_State.effective_offset");
-_Static_assert(FB_OFFSETOF(fb_Scrolling_State, scheduled_scroll) == 16, "fb_Scrolling_State.scheduled_scroll");
-
-typedef struct fb_Complete_Style fb_Complete_Style;
-typedef struct fb_Background fb_Background;
-typedef fb_u8 fb_Background_Kind;
-#define FB_BACKGROUND_KIND_COLOR 0
-#define FB_BACKGROUND_KIND_GRADIENT 1
-
-typedef struct fb_Vector4 fb_Vector4;
-struct fb_Vector4 {
-    float x;
-    float y;
-    float z;
-    float w;
-};
-_Static_assert(sizeof(fb_Vector4) == 16, "fb_Vector4");
-_Static_assert(FB_OFFSETOF(fb_Vector4, x) == 0, "fb_Vector4.x");
-_Static_assert(FB_OFFSETOF(fb_Vector4, y) == 4, "fb_Vector4.y");
-_Static_assert(FB_OFFSETOF(fb_Vector4, z) == 8, "fb_Vector4.z");
-_Static_assert(FB_OFFSETOF(fb_Vector4, w) == 12, "fb_Vector4.w");
-
-typedef struct fb_Linear_Gradient fb_Linear_Gradient;
-typedef struct fb_Gradient_Stop fb_Gradient_Stop;
-struct fb_Gradient_Stop {
-    fb_Vector4 color;
-    float position;
-};
-_Static_assert(sizeof(fb_Gradient_Stop) == 20, "fb_Gradient_Stop");
-_Static_assert(FB_OFFSETOF(fb_Gradient_Stop, color) == 0, "fb_Gradient_Stop.color");
-_Static_assert(FB_OFFSETOF(fb_Gradient_Stop, position) == 16, "fb_Gradient_Stop.position");
-
-typedef struct { fb_s64 count; fb_Gradient_Stop *data; } fb_View_Gradient_Stop;
-
-struct fb_Linear_Gradient {
-    fb_View_Gradient_Stop stops;
-    fb_Vector2 direction;
-};
-_Static_assert(sizeof(fb_Linear_Gradient) == 24, "fb_Linear_Gradient");
-_Static_assert(FB_OFFSETOF(fb_Linear_Gradient, stops) == 0, "fb_Linear_Gradient.stops");
-_Static_assert(FB_OFFSETOF(fb_Linear_Gradient, direction) == 16, "fb_Linear_Gradient.direction");
-
-struct fb_Background {
-    fb_Background_Kind kind;
-    union {
-    fb_Vector4 color;
-    fb_Linear_Gradient gradient;
-    };
-};
-_Static_assert(sizeof(fb_Background) == 32, "fb_Background");
-_Static_assert(FB_OFFSETOF(fb_Background, kind) == 0, "fb_Background.kind");
-
-typedef struct fb_Sides fb_Sides;
-struct fb_Sides {
-    fb_Vector2 x;
-    fb_Vector2 y;
-};
-_Static_assert(sizeof(fb_Sides) == 16, "fb_Sides");
-_Static_assert(FB_OFFSETOF(fb_Sides, x) == 0, "fb_Sides.x");
-_Static_assert(FB_OFFSETOF(fb_Sides, y) == 8, "fb_Sides.y");
-
-typedef fb_u32 fb_Border_Style;
-#define FB_BORDER_STYLE_SOLID 0
-#define FB_BORDER_STYLE_DASHED 1
-
-typedef struct fb_Shadow fb_Shadow;
-struct fb_Shadow {
-    fb_Sides offset;
-    float blur_radius;
-    float spread;
-    fb_Vector4 color;
-};
-_Static_assert(sizeof(fb_Shadow) == 40, "fb_Shadow");
-_Static_assert(FB_OFFSETOF(fb_Shadow, offset) == 0, "fb_Shadow.offset");
-_Static_assert(FB_OFFSETOF(fb_Shadow, blur_radius) == 16, "fb_Shadow.blur_radius");
-_Static_assert(FB_OFFSETOF(fb_Shadow, spread) == 20, "fb_Shadow.spread");
-_Static_assert(FB_OFFSETOF(fb_Shadow, color) == 24, "fb_Shadow.color");
-
+typedef struct fb_Base_Style fb_Base_Style;
 typedef struct fb_Font fb_Font;
 struct fb_Font {
     fb_String memory;
@@ -859,6 +741,19 @@ typedef fb_u32 fb_Text_Direction;
 #define FB_TEXT_DIRECTION_LEFT_TO_RIGHT 1
 #define FB_TEXT_DIRECTION_RIGHT_TO_LEFT 2
 
+typedef struct fb_Vector4 fb_Vector4;
+struct fb_Vector4 {
+    float x;
+    float y;
+    float z;
+    float w;
+};
+_Static_assert(sizeof(fb_Vector4) == 16, "fb_Vector4");
+_Static_assert(FB_OFFSETOF(fb_Vector4, x) == 0, "fb_Vector4.x");
+_Static_assert(FB_OFFSETOF(fb_Vector4, y) == 4, "fb_Vector4.y");
+_Static_assert(FB_OFFSETOF(fb_Vector4, z) == 8, "fb_Vector4.z");
+_Static_assert(FB_OFFSETOF(fb_Vector4, w) == 12, "fb_Vector4.w");
+
 typedef struct fb_Line_Height fb_Line_Height;
 typedef fb_u8 fb_Line_Height_Kind;
 #define FB_LINE_HEIGHT_KIND_PERCENTAGE 0
@@ -893,6 +788,99 @@ typedef fb_u8 fb_Cursor;
 #define FB_CURSOR_NS_RESIZE 10
 #define FB_CURSOR_NWSE_RESIZE 11
 #define FB_CURSOR_NESW_RESIZE 12
+
+struct fb_Base_Style {
+    fb_Font * font;
+    fb_Language language;
+    fb_Text_Direction text_direction;
+    fb_Vector4 color;
+    float font_size;
+    fb_u16 font_weight;
+    fb_Line_Height line_height;
+    fb_Text_Wrapping text_wrapping;
+    fb_Cursor cursor;
+};
+_Static_assert(sizeof(fb_Base_Style) == 56, "fb_Base_Style");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, font) == 0, "fb_Base_Style.font");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, language) == 8, "fb_Base_Style.language");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, text_direction) == 12, "fb_Base_Style.text_direction");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, color) == 16, "fb_Base_Style.color");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, font_size) == 32, "fb_Base_Style.font_size");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, font_weight) == 36, "fb_Base_Style.font_weight");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, line_height) == 40, "fb_Base_Style.line_height");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, text_wrapping) == 48, "fb_Base_Style.text_wrapping");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, cursor) == 49, "fb_Base_Style.cursor");
+
+typedef struct fb_Complete_Style fb_Complete_Style;
+typedef struct fb_Background fb_Background;
+typedef fb_u8 fb_Background_Kind;
+#define FB_BACKGROUND_KIND_COLOR 0
+#define FB_BACKGROUND_KIND_GRADIENT 1
+
+typedef struct fb_Linear_Gradient fb_Linear_Gradient;
+typedef struct fb_Gradient_Stop fb_Gradient_Stop;
+struct fb_Gradient_Stop {
+    fb_Vector4 color;
+    float position;
+};
+_Static_assert(sizeof(fb_Gradient_Stop) == 20, "fb_Gradient_Stop");
+_Static_assert(FB_OFFSETOF(fb_Gradient_Stop, color) == 0, "fb_Gradient_Stop.color");
+_Static_assert(FB_OFFSETOF(fb_Gradient_Stop, position) == 16, "fb_Gradient_Stop.position");
+
+typedef struct { fb_s64 count; fb_Gradient_Stop *data; } fb_View_Gradient_Stop;
+
+typedef struct fb_Vector2 fb_Vector2;
+struct fb_Vector2 {
+    float x;
+    float y;
+};
+_Static_assert(sizeof(fb_Vector2) == 8, "fb_Vector2");
+_Static_assert(FB_OFFSETOF(fb_Vector2, x) == 0, "fb_Vector2.x");
+_Static_assert(FB_OFFSETOF(fb_Vector2, y) == 4, "fb_Vector2.y");
+
+struct fb_Linear_Gradient {
+    fb_View_Gradient_Stop stops;
+    fb_Vector2 direction;
+};
+_Static_assert(sizeof(fb_Linear_Gradient) == 24, "fb_Linear_Gradient");
+_Static_assert(FB_OFFSETOF(fb_Linear_Gradient, stops) == 0, "fb_Linear_Gradient.stops");
+_Static_assert(FB_OFFSETOF(fb_Linear_Gradient, direction) == 16, "fb_Linear_Gradient.direction");
+
+struct fb_Background {
+    fb_Background_Kind kind;
+    union {
+    fb_Vector4 color;
+    fb_Linear_Gradient gradient;
+    };
+};
+_Static_assert(sizeof(fb_Background) == 32, "fb_Background");
+_Static_assert(FB_OFFSETOF(fb_Background, kind) == 0, "fb_Background.kind");
+
+typedef struct fb_Sides fb_Sides;
+struct fb_Sides {
+    fb_Vector2 x;
+    fb_Vector2 y;
+};
+_Static_assert(sizeof(fb_Sides) == 16, "fb_Sides");
+_Static_assert(FB_OFFSETOF(fb_Sides, x) == 0, "fb_Sides.x");
+_Static_assert(FB_OFFSETOF(fb_Sides, y) == 8, "fb_Sides.y");
+
+typedef fb_u32 fb_Border_Style;
+#define FB_BORDER_STYLE_SOLID 0
+#define FB_BORDER_STYLE_DASHED 1
+
+typedef struct fb_Shadow fb_Shadow;
+struct fb_Shadow {
+    fb_Sides offset;
+    float blur_radius;
+    float spread;
+    fb_Vector4 color;
+};
+_Static_assert(sizeof(fb_Shadow) == 40, "fb_Shadow");
+_Static_assert(FB_OFFSETOF(fb_Shadow, offset) == 0, "fb_Shadow.offset");
+_Static_assert(FB_OFFSETOF(fb_Shadow, blur_radius) == 16, "fb_Shadow.blur_radius");
+_Static_assert(FB_OFFSETOF(fb_Shadow, spread) == 20, "fb_Shadow.spread");
+_Static_assert(FB_OFFSETOF(fb_Shadow, color) == 24, "fb_Shadow.color");
 
 typedef fb_u8 fb_Overflow;
 #define FB_OVERFLOW_VISIBLE 0
@@ -1013,109 +1001,6 @@ _Static_assert(FB_OFFSETOF(fb_Complete_Style, margin) == 244, "fb_Complete_Style
 _Static_assert(FB_OFFSETOF(fb_Complete_Style, direction) == 260, "fb_Complete_Style.direction");
 _Static_assert(FB_OFFSETOF(fb_Complete_Style, x_justification) == 261, "fb_Complete_Style.x_justification");
 _Static_assert(FB_OFFSETOF(fb_Complete_Style, y_justification) == 262, "fb_Complete_Style.y_justification");
-
-typedef struct fb_Base_Style fb_Base_Style;
-struct fb_Base_Style {
-    fb_Font * font;
-    fb_Language language;
-    fb_Text_Direction text_direction;
-    fb_Vector4 color;
-    float font_size;
-    fb_u16 font_weight;
-    fb_Line_Height line_height;
-    fb_Text_Wrapping text_wrapping;
-    fb_Cursor cursor;
-};
-_Static_assert(sizeof(fb_Base_Style) == 56, "fb_Base_Style");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, font) == 0, "fb_Base_Style.font");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, language) == 8, "fb_Base_Style.language");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, text_direction) == 12, "fb_Base_Style.text_direction");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, color) == 16, "fb_Base_Style.color");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, font_size) == 32, "fb_Base_Style.font_size");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, font_weight) == 36, "fb_Base_Style.font_weight");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, line_height) == 40, "fb_Base_Style.line_height");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, text_wrapping) == 48, "fb_Base_Style.text_wrapping");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, cursor) == 49, "fb_Base_Style.cursor");
-
-typedef struct fb_Style fb_Style;
-struct fb_Style {
-    fb_Background background;
-    fb_Vector4 color;
-    float border_radius;
-    fb_Vector4 border_color;
-    fb_Sides border_width;
-    fb_Border_Style border_style;
-    fb_Shadow shadow;
-    fb_Font * font;
-    fb_u16 font_weight;
-    float font_size;
-    fb_Line_Height line_height;
-    fb_Text_Wrapping text_wrapping;
-    fb_Language language;
-    fb_Text_Direction text_direction;
-    fb_Cursor cursor;
-    fb_Overflow overflow;
-    fb_Placement placement;
-    fb_u16 z_index;
-    float min_width;
-    float max_width;
-    fb_Sizing width;
-    float min_height;
-    float max_height;
-    fb_Sizing height;
-    fb_Vector2 translate;
-    fb_Vector2 children_offset;
-    fb_Sides padding;
-    fb_Sides margin;
-    fb_Alignment x_justification;
-    fb_Alignment y_justification;
-    fb_Direction direction;
-};
-_Static_assert(sizeof(fb_Style) == 272, "fb_Style");
-_Static_assert(FB_OFFSETOF(fb_Style, background) == 0, "fb_Style.background");
-_Static_assert(FB_OFFSETOF(fb_Style, color) == 32, "fb_Style.color");
-_Static_assert(FB_OFFSETOF(fb_Style, border_radius) == 48, "fb_Style.border_radius");
-_Static_assert(FB_OFFSETOF(fb_Style, border_color) == 52, "fb_Style.border_color");
-_Static_assert(FB_OFFSETOF(fb_Style, border_width) == 68, "fb_Style.border_width");
-_Static_assert(FB_OFFSETOF(fb_Style, border_style) == 84, "fb_Style.border_style");
-_Static_assert(FB_OFFSETOF(fb_Style, shadow) == 88, "fb_Style.shadow");
-_Static_assert(FB_OFFSETOF(fb_Style, font) == 128, "fb_Style.font");
-_Static_assert(FB_OFFSETOF(fb_Style, font_weight) == 136, "fb_Style.font_weight");
-_Static_assert(FB_OFFSETOF(fb_Style, font_size) == 140, "fb_Style.font_size");
-_Static_assert(FB_OFFSETOF(fb_Style, line_height) == 144, "fb_Style.line_height");
-_Static_assert(FB_OFFSETOF(fb_Style, text_wrapping) == 152, "fb_Style.text_wrapping");
-_Static_assert(FB_OFFSETOF(fb_Style, language) == 156, "fb_Style.language");
-_Static_assert(FB_OFFSETOF(fb_Style, text_direction) == 160, "fb_Style.text_direction");
-_Static_assert(FB_OFFSETOF(fb_Style, cursor) == 164, "fb_Style.cursor");
-_Static_assert(FB_OFFSETOF(fb_Style, overflow) == 165, "fb_Style.overflow");
-_Static_assert(FB_OFFSETOF(fb_Style, placement) == 168, "fb_Style.placement");
-_Static_assert(FB_OFFSETOF(fb_Style, z_index) == 180, "fb_Style.z_index");
-_Static_assert(FB_OFFSETOF(fb_Style, min_width) == 184, "fb_Style.min_width");
-_Static_assert(FB_OFFSETOF(fb_Style, max_width) == 188, "fb_Style.max_width");
-_Static_assert(FB_OFFSETOF(fb_Style, width) == 192, "fb_Style.width");
-_Static_assert(FB_OFFSETOF(fb_Style, min_height) == 200, "fb_Style.min_height");
-_Static_assert(FB_OFFSETOF(fb_Style, max_height) == 204, "fb_Style.max_height");
-_Static_assert(FB_OFFSETOF(fb_Style, height) == 208, "fb_Style.height");
-_Static_assert(FB_OFFSETOF(fb_Style, translate) == 216, "fb_Style.translate");
-_Static_assert(FB_OFFSETOF(fb_Style, children_offset) == 224, "fb_Style.children_offset");
-_Static_assert(FB_OFFSETOF(fb_Style, padding) == 232, "fb_Style.padding");
-_Static_assert(FB_OFFSETOF(fb_Style, margin) == 248, "fb_Style.margin");
-_Static_assert(FB_OFFSETOF(fb_Style, x_justification) == 264, "fb_Style.x_justification");
-_Static_assert(FB_OFFSETOF(fb_Style, y_justification) == 265, "fb_Style.y_justification");
-_Static_assert(FB_OFFSETOF(fb_Style, direction) == 266, "fb_Style.direction");
-
-typedef struct fb_Node_Opening_Data fb_Node_Opening_Data;
-struct fb_Node_Opening_Data {
-    fb_s64 parent_index;
-    fb_u64 scope_key;
-    fb_Base_Style base_style;
-    fb_s64 node_index;
-};
-_Static_assert(sizeof(fb_Node_Opening_Data) == 80, "fb_Node_Opening_Data");
-_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, parent_index) == 0, "fb_Node_Opening_Data.parent_index");
-_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, scope_key) == 8, "fb_Node_Opening_Data.scope_key");
-_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, base_style) == 16, "fb_Node_Opening_Data.base_style");
-_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, node_index) == 72, "fb_Node_Opening_Data.node_index");
 
 typedef struct fb_Forbear fb_Forbear;
 typedef struct fb_Node fb_Node;
@@ -1574,184 +1459,20 @@ _Static_assert(FB_OFFSETOF(fb_Forbear, glyph_atlas) == 18688, "fb_Forbear.glyph_
 _Static_assert(FB_OFFSETOF(fb_Forbear, window) == 18776, "fb_Forbear.window");
 _Static_assert(FB_OFFSETOF(fb_Forbear, backend) == 18784, "fb_Forbear.backend");
 
-typedef fb_s64 fb_Mouse_Button;
-#define FB_MOUSE_BUTTON_LEFT 0
-#define FB_MOUSE_BUTTON_RIGHT 1
-#define FB_MOUSE_BUTTON_MIDDLE 2
-#define FB_MOUSE_BUTTON_BACK 3
-#define FB_MOUSE_BUTTON_FORWARD 4
-
-typedef fb_Windows_GL_Window fb_Window;
-typedef fb_Windows_GL_Backend fb_Backend;
-
-fb_String fb_get_text_input(void);
-void fb_copy_to_clipboard(const char * text);
-fb_String fb_get_clipboard_text(void);
-_Bool fb_is_mouse_inside(void);
-double fb_get_last_frame_time(void);
-float fb_get_delta_time(void);
-typedef float (*fb_Proc_float_float)(float);
-float fb_use_transition_f(float value, float duration, fb_Proc_float_float easing);
-void fb_text(const char * content, const char * key);
-void * fb_node_realloc(void * memory, fb_s64 size, fb_s64 old_size);
-void * fb_node_alloc(fb_s64 size);
-void * fb_frame_realloc(void * memory, fb_s64 size, fb_s64 old_size);
-void * fb_frame_alloc(fb_s64 size);
-void * fb_state(fb_s64 size, void * initial);
-void fb_prepare_for_next_frame(void);
-void fb_layout(void);
-_Bool fb_on_key_up(fb_Key key);
-_Bool fb_on_key_down(fb_Key key, _Bool on_repeat);
-_Bool fb_on_click(fb_Mouse_Button button, _Bool check_inside, _Bool movement_threshold);
-_Bool fb_on_mouse_up(fb_Mouse_Button button, _Bool check_inside);
-_Bool fb_on_mouse_down(fb_Mouse_Button button, _Bool check_inside);
-_Bool fb_is_mouse_held(fb_Mouse_Button button);
-_Bool fb_is_dragging(fb_Mouse_Button button);
-fb_Vector2 fb_get_press_position(fb_Mouse_Button button);
-fb_Vector2 fb_get_scroll_delta(void);
-fb_Vector2 fb_get_mouse_position(void);
-void fb_set_cursor(fb_Cursor cursor);
-fb_Preferred_Theme fb_get_preferred_theme(void);
-fb_Vector2 fb_get_viewport_size(void);
-fb_Node * fb_get_node(fb_s64 node_index);
-_Bool fb_get_measurement(fb_s64 node_index, _Bool include_scopes, fb_Node_Measurement * out);
-void fb_complete_with(fb_Style style, fb_Base_Style base, fb_Complete_Style * out);
-fb_Style fb_overwrite(fb_Style overwritten, fb_Style overwriter);
-fb_Placement fb_relative(fb_Vector2 value, fb_Corner corner);
-fb_Placement fb_fixed_placement(fb_Vector2 value, fb_Corner corner);
-fb_Placement fb_flow(void);
-fb_Vector4 fb_rgba(float r, float g, float b, float a);
-fb_Vector4 fb_rgb(float r, float g, float b);
-fb_Background fb_gradient(fb_Linear_Gradient value);
-fb_Background fb_color(fb_Vector4 value);
-fb_Vector2 fb_to_bottom_right(void);
-fb_Vector2 fb_to_bottom_left(void);
-fb_Vector2 fb_to_top_right(void);
-fb_Vector2 fb_to_top_left(void);
-fb_Vector2 fb_to_right(void);
-fb_Vector2 fb_to_left(void);
-fb_Vector2 fb_to_bottom(void);
-fb_Vector2 fb_to_top(void);
-fb_Vector2 fb_angle(float degrees);
-fb_Base_Style fb_from(fb_Complete_Style style);
-void fb_use_scrolling(fb_Scrolling_State * state);
-void fb_schedule_scroll(fb_Scrolling_State * state, fb_Vector2 position, _Bool animate);
-fb_Vector4 fb_use_transition_v4(fb_Vector4 value, float duration, fb_Proc_float_float easing);
-fb_Vector3 fb_use_transition_v3(fb_Vector3 value, float duration, fb_Proc_float_float easing);
-fb_Vector2 fb_use_transition_v2(fb_Vector2 value, float duration, fb_Proc_float_float easing);
-fb_Line_Height fb_line_height_fixed(float value);
-fb_Line_Height fb_line_height_percentage(float value);
-fb_Sides fb_with_bottom_sides(fb_Sides sides, float value);
-fb_Sides fb_bottom_sides(float value);
-fb_Sides fb_with_top_sides(fb_Sides sides, float value);
-fb_Sides fb_top_sides(float value);
-fb_Sides fb_with_right_sides(fb_Sides sides, float value);
-fb_Sides fb_right_sides(float value);
-fb_Sides fb_with_left_sides(fb_Sides sides, float value);
-fb_Sides fb_left_sides(float value);
-fb_Sides fb_with_block_sides(fb_Sides sides, float value);
-fb_Sides fb_block_sides(float value);
-fb_Sides fb_with_in_line_sides(fb_Sides sides, float value);
-fb_Sides fb_in_line_sides(float value);
-fb_Sides fb_all_sides(float value);
-fb_Sizing fb_grow(float value);
-fb_Sizing fb_fixed(float value);
-fb_Sizing fb_fit(void);
-fb_Direction fb_opposite(fb_Direction direction);
-void fb_stext(fb_Style style, const char * content, const char * key);
-void fb_close_scope(fb_Node_Opening_Data data);
-fb_Node_Opening_Data fb_open_scope(const char * key);
-void fb_close_element(fb_Node_Opening_Data data);
-fb_Node_Opening_Data fb_open_element(fb_Style style, const char * key);
-void fb_draw(fb_Vector4 clearing_color);
-void fb_init_font(fb_Font * font);
-fb_Font fb_create_font(fb_String memory);
-void fb_update_backend(fb_Windows_GL_Backend * backend);
-void fb_init_window(fb_Windows_GL_Backend * backend, fb_Windows_GL_Window * window, double width, double height, const char * title, double min_width, double min_height, double max_width, double max_height);
-void fb_init_backend(fb_Windows_GL_Backend * backend);
-void fb_init_forbear(fb_Forbear * forbear, fb_Windows_GL_Backend * program_backend, fb_Windows_GL_Window * program_window, fb_Base_Style program_base_style);
-_Bool fb_is_key_held(fb_Key key);
-typedef struct fb_Spring_Config_Vector4 fb_Spring_Config_Vector4;
-struct fb_Spring_Config_Vector4 {
-    float stiffness;
-    float damping;
-    float mass;
-    fb_Vector4 * current;
+typedef struct fb_Node_Opening_Data fb_Node_Opening_Data;
+struct fb_Node_Opening_Data {
+    fb_s64 parent_index;
+    fb_u64 scope_key;
+    fb_Base_Style base_style;
+    fb_s64 node_index;
 };
-_Static_assert(sizeof(fb_Spring_Config_Vector4) == 24, "fb_Spring_Config_Vector4");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, stiffness) == 0, "fb_Spring_Config_Vector4.stiffness");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, damping) == 4, "fb_Spring_Config_Vector4.damping");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, mass) == 8, "fb_Spring_Config_Vector4.mass");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, current) == 16, "fb_Spring_Config_Vector4.current");
-
-fb_Vector4 fb_use_spring_transition_v4(fb_Vector4 target, fb_Spring_Config_Vector4 config);
-typedef struct fb_Spring_Config_Vector3 fb_Spring_Config_Vector3;
-struct fb_Spring_Config_Vector3 {
-    float stiffness;
-    float damping;
-    float mass;
-    fb_Vector3 * current;
-};
-_Static_assert(sizeof(fb_Spring_Config_Vector3) == 24, "fb_Spring_Config_Vector3");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, stiffness) == 0, "fb_Spring_Config_Vector3.stiffness");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, damping) == 4, "fb_Spring_Config_Vector3.damping");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, mass) == 8, "fb_Spring_Config_Vector3.mass");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, current) == 16, "fb_Spring_Config_Vector3.current");
-
-fb_Vector3 fb_use_spring_transition_v3(fb_Vector3 target, fb_Spring_Config_Vector3 config);
-typedef struct fb_Spring_Config_Vector2 fb_Spring_Config_Vector2;
-struct fb_Spring_Config_Vector2 {
-    float stiffness;
-    float damping;
-    float mass;
-    fb_Vector2 * current;
-};
-_Static_assert(sizeof(fb_Spring_Config_Vector2) == 24, "fb_Spring_Config_Vector2");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, stiffness) == 0, "fb_Spring_Config_Vector2.stiffness");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, damping) == 4, "fb_Spring_Config_Vector2.damping");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, mass) == 8, "fb_Spring_Config_Vector2.mass");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, current) == 16, "fb_Spring_Config_Vector2.current");
-
-fb_Vector2 fb_use_spring_transition_v2(fb_Vector2 target, fb_Spring_Config_Vector2 config);
-typedef struct fb_Spring_Config_float fb_Spring_Config_float;
-struct fb_Spring_Config_float {
-    float stiffness;
-    float damping;
-    float mass;
-    float * current;
-};
-_Static_assert(sizeof(fb_Spring_Config_float) == 24, "fb_Spring_Config_float");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, stiffness) == 0, "fb_Spring_Config_float.stiffness");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, damping) == 4, "fb_Spring_Config_float.damping");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, mass) == 8, "fb_Spring_Config_float.mass");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, current) == 16, "fb_Spring_Config_float.current");
-
-float fb_use_spring_transition_f(float target, fb_Spring_Config_float config);
-#endif
-
-#if defined(__linux__)
-typedef struct { fb_s64 count; fb_u8 *data; } fb_String;
-typedef struct fb_Vector3 fb_Vector3;
-struct fb_Vector3 {
-    float x;
-    float y;
-    float z;
-};
-_Static_assert(sizeof(fb_Vector3) == 12, "fb_Vector3");
-_Static_assert(FB_OFFSETOF(fb_Vector3, x) == 0, "fb_Vector3.x");
-_Static_assert(FB_OFFSETOF(fb_Vector3, y) == 4, "fb_Vector3.y");
-_Static_assert(FB_OFFSETOF(fb_Vector3, z) == 8, "fb_Vector3.z");
+_Static_assert(sizeof(fb_Node_Opening_Data) == 80, "fb_Node_Opening_Data");
+_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, parent_index) == 0, "fb_Node_Opening_Data.parent_index");
+_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, scope_key) == 8, "fb_Node_Opening_Data.scope_key");
+_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, base_style) == 16, "fb_Node_Opening_Data.base_style");
+_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, node_index) == 72, "fb_Node_Opening_Data.node_index");
 
 typedef struct fb_Scrolling_State fb_Scrolling_State;
-typedef struct fb_Vector2 fb_Vector2;
-struct fb_Vector2 {
-    float x;
-    float y;
-};
-_Static_assert(sizeof(fb_Vector2) == 8, "fb_Vector2");
-_Static_assert(FB_OFFSETOF(fb_Vector2, x) == 0, "fb_Vector2.x");
-_Static_assert(FB_OFFSETOF(fb_Vector2, y) == 4, "fb_Vector2.y");
-
 typedef struct fb_Scheduled_Scroll fb_Scheduled_Scroll;
 struct fb_Scheduled_Scroll {
     _Bool defined;
@@ -1775,81 +1496,242 @@ _Static_assert(FB_OFFSETOF(fb_Scrolling_State, offset) == 0, "fb_Scrolling_State
 _Static_assert(FB_OFFSETOF(fb_Scrolling_State, effective_offset) == 8, "fb_Scrolling_State.effective_offset");
 _Static_assert(FB_OFFSETOF(fb_Scrolling_State, scheduled_scroll) == 16, "fb_Scrolling_State.scheduled_scroll");
 
-typedef struct fb_Complete_Style fb_Complete_Style;
-typedef struct fb_Background fb_Background;
-typedef fb_u8 fb_Background_Kind;
-#define FB_BACKGROUND_KIND_COLOR 0
-#define FB_BACKGROUND_KIND_GRADIENT 1
+typedef struct fb_Style fb_Style;
+struct fb_Style {
+    fb_Background background;
+    fb_Vector4 color;
+    float border_radius;
+    fb_Vector4 border_color;
+    fb_Sides border_width;
+    fb_Border_Style border_style;
+    fb_Shadow shadow;
+    fb_Font * font;
+    fb_u16 font_weight;
+    float font_size;
+    fb_Line_Height line_height;
+    fb_Text_Wrapping text_wrapping;
+    fb_Language language;
+    fb_Text_Direction text_direction;
+    fb_Cursor cursor;
+    fb_Overflow overflow;
+    fb_Placement placement;
+    fb_u16 z_index;
+    float min_width;
+    float max_width;
+    fb_Sizing width;
+    float min_height;
+    float max_height;
+    fb_Sizing height;
+    fb_Vector2 translate;
+    fb_Vector2 children_offset;
+    fb_Sides padding;
+    fb_Sides margin;
+    fb_Alignment x_justification;
+    fb_Alignment y_justification;
+    fb_Direction direction;
+};
+_Static_assert(sizeof(fb_Style) == 272, "fb_Style");
+_Static_assert(FB_OFFSETOF(fb_Style, background) == 0, "fb_Style.background");
+_Static_assert(FB_OFFSETOF(fb_Style, color) == 32, "fb_Style.color");
+_Static_assert(FB_OFFSETOF(fb_Style, border_radius) == 48, "fb_Style.border_radius");
+_Static_assert(FB_OFFSETOF(fb_Style, border_color) == 52, "fb_Style.border_color");
+_Static_assert(FB_OFFSETOF(fb_Style, border_width) == 68, "fb_Style.border_width");
+_Static_assert(FB_OFFSETOF(fb_Style, border_style) == 84, "fb_Style.border_style");
+_Static_assert(FB_OFFSETOF(fb_Style, shadow) == 88, "fb_Style.shadow");
+_Static_assert(FB_OFFSETOF(fb_Style, font) == 128, "fb_Style.font");
+_Static_assert(FB_OFFSETOF(fb_Style, font_weight) == 136, "fb_Style.font_weight");
+_Static_assert(FB_OFFSETOF(fb_Style, font_size) == 140, "fb_Style.font_size");
+_Static_assert(FB_OFFSETOF(fb_Style, line_height) == 144, "fb_Style.line_height");
+_Static_assert(FB_OFFSETOF(fb_Style, text_wrapping) == 152, "fb_Style.text_wrapping");
+_Static_assert(FB_OFFSETOF(fb_Style, language) == 156, "fb_Style.language");
+_Static_assert(FB_OFFSETOF(fb_Style, text_direction) == 160, "fb_Style.text_direction");
+_Static_assert(FB_OFFSETOF(fb_Style, cursor) == 164, "fb_Style.cursor");
+_Static_assert(FB_OFFSETOF(fb_Style, overflow) == 165, "fb_Style.overflow");
+_Static_assert(FB_OFFSETOF(fb_Style, placement) == 168, "fb_Style.placement");
+_Static_assert(FB_OFFSETOF(fb_Style, z_index) == 180, "fb_Style.z_index");
+_Static_assert(FB_OFFSETOF(fb_Style, min_width) == 184, "fb_Style.min_width");
+_Static_assert(FB_OFFSETOF(fb_Style, max_width) == 188, "fb_Style.max_width");
+_Static_assert(FB_OFFSETOF(fb_Style, width) == 192, "fb_Style.width");
+_Static_assert(FB_OFFSETOF(fb_Style, min_height) == 200, "fb_Style.min_height");
+_Static_assert(FB_OFFSETOF(fb_Style, max_height) == 204, "fb_Style.max_height");
+_Static_assert(FB_OFFSETOF(fb_Style, height) == 208, "fb_Style.height");
+_Static_assert(FB_OFFSETOF(fb_Style, translate) == 216, "fb_Style.translate");
+_Static_assert(FB_OFFSETOF(fb_Style, children_offset) == 224, "fb_Style.children_offset");
+_Static_assert(FB_OFFSETOF(fb_Style, padding) == 232, "fb_Style.padding");
+_Static_assert(FB_OFFSETOF(fb_Style, margin) == 248, "fb_Style.margin");
+_Static_assert(FB_OFFSETOF(fb_Style, x_justification) == 264, "fb_Style.x_justification");
+_Static_assert(FB_OFFSETOF(fb_Style, y_justification) == 265, "fb_Style.y_justification");
+_Static_assert(FB_OFFSETOF(fb_Style, direction) == 266, "fb_Style.direction");
 
-typedef struct fb_Vector4 fb_Vector4;
-struct fb_Vector4 {
+typedef struct fb_Vector3 fb_Vector3;
+struct fb_Vector3 {
     float x;
     float y;
     float z;
-    float w;
 };
-_Static_assert(sizeof(fb_Vector4) == 16, "fb_Vector4");
-_Static_assert(FB_OFFSETOF(fb_Vector4, x) == 0, "fb_Vector4.x");
-_Static_assert(FB_OFFSETOF(fb_Vector4, y) == 4, "fb_Vector4.y");
-_Static_assert(FB_OFFSETOF(fb_Vector4, z) == 8, "fb_Vector4.z");
-_Static_assert(FB_OFFSETOF(fb_Vector4, w) == 12, "fb_Vector4.w");
+_Static_assert(sizeof(fb_Vector3) == 12, "fb_Vector3");
+_Static_assert(FB_OFFSETOF(fb_Vector3, x) == 0, "fb_Vector3.x");
+_Static_assert(FB_OFFSETOF(fb_Vector3, y) == 4, "fb_Vector3.y");
+_Static_assert(FB_OFFSETOF(fb_Vector3, z) == 8, "fb_Vector3.z");
 
-typedef struct fb_Linear_Gradient fb_Linear_Gradient;
-typedef struct fb_Gradient_Stop fb_Gradient_Stop;
-struct fb_Gradient_Stop {
-    fb_Vector4 color;
-    float position;
+typedef fb_s64 fb_Mouse_Button;
+#define FB_MOUSE_BUTTON_LEFT 0
+#define FB_MOUSE_BUTTON_RIGHT 1
+#define FB_MOUSE_BUTTON_MIDDLE 2
+#define FB_MOUSE_BUTTON_BACK 3
+#define FB_MOUSE_BUTTON_FORWARD 4
+
+typedef fb_Windows_GL_Window fb_Window;
+typedef fb_Windows_GL_Backend fb_Backend;
+
+fb_Sides fb_all_sides(float value);
+fb_Vector2 fb_angle(float degrees);
+fb_Sides fb_block_sides(float value);
+fb_Sides fb_bottom_sides(float value);
+void fb_close_element(fb_Node_Opening_Data data);
+void fb_close_scope(fb_Node_Opening_Data data);
+fb_Background fb_color(fb_Vector4 value);
+void fb_complete_with(fb_Style style, fb_Base_Style base, fb_Complete_Style * out);
+void fb_copy_to_clipboard(const char * text);
+fb_Font fb_create_font(fb_String memory);
+void fb_draw(fb_Vector4 clearing_color);
+fb_Sizing fb_fit(void);
+fb_Sizing fb_fixed(float value);
+fb_Placement fb_fixed_placement(fb_Vector2 value, fb_Corner corner);
+fb_Placement fb_flow(void);
+void * fb_frame_alloc(fb_s64 size);
+void * fb_frame_realloc(void * memory, fb_s64 size, fb_s64 old_size);
+fb_Base_Style fb_from(fb_Complete_Style style);
+fb_String fb_get_clipboard_text(void);
+float fb_get_delta_time(void);
+double fb_get_last_frame_time(void);
+_Bool fb_get_measurement(fb_s64 node_index, _Bool include_scopes, fb_Node_Measurement * out);
+fb_Vector2 fb_get_mouse_position(void);
+fb_Node * fb_get_node(fb_s64 node_index);
+fb_Preferred_Theme fb_get_preferred_theme(void);
+fb_Vector2 fb_get_press_position(fb_Mouse_Button button);
+fb_Vector2 fb_get_scroll_delta(void);
+fb_String fb_get_text_input(void);
+fb_Vector2 fb_get_viewport_size(void);
+fb_Background fb_gradient(fb_Linear_Gradient value);
+fb_Sizing fb_grow(float value);
+fb_Sides fb_in_line_sides(float value);
+void fb_init_backend(fb_Windows_GL_Backend * backend);
+void fb_init_font(fb_Font * font);
+void fb_init_forbear(fb_Forbear * forbear, fb_Windows_GL_Backend * program_backend, fb_Windows_GL_Window * program_window, fb_Base_Style program_base_style);
+void fb_init_window(fb_Windows_GL_Backend * backend, fb_Windows_GL_Window * window, double width, double height, const char * title, double min_width, double min_height, double max_width, double max_height);
+_Bool fb_is_dragging(fb_Mouse_Button button);
+_Bool fb_is_key_held(fb_Key key);
+_Bool fb_is_mouse_held(fb_Mouse_Button button);
+_Bool fb_is_mouse_inside(void);
+void fb_layout(void);
+fb_Sides fb_left_sides(float value);
+fb_Line_Height fb_line_height_fixed(float value);
+fb_Line_Height fb_line_height_percentage(float value);
+void * fb_node_alloc(fb_s64 size);
+void * fb_node_realloc(void * memory, fb_s64 size, fb_s64 old_size);
+_Bool fb_on_click(fb_Mouse_Button button, _Bool check_inside, _Bool movement_threshold);
+_Bool fb_on_key_down(fb_Key key, _Bool on_repeat);
+_Bool fb_on_key_up(fb_Key key);
+_Bool fb_on_mouse_down(fb_Mouse_Button button, _Bool check_inside);
+_Bool fb_on_mouse_up(fb_Mouse_Button button, _Bool check_inside);
+fb_Node_Opening_Data fb_open_element(fb_Style style, const char * key);
+fb_Node_Opening_Data fb_open_scope(const char * key);
+fb_Direction fb_opposite(fb_Direction direction);
+fb_Style fb_overwrite(fb_Style overwritten, fb_Style overwriter);
+void fb_prepare_for_next_frame(void);
+fb_Placement fb_relative(fb_Vector2 value, fb_Corner corner);
+fb_Vector4 fb_rgb(float r, float g, float b);
+fb_Vector4 fb_rgba(float r, float g, float b, float a);
+fb_Sides fb_right_sides(float value);
+void fb_schedule_scroll(fb_Scrolling_State * state, fb_Vector2 position, _Bool animate);
+void fb_set_cursor(fb_Cursor cursor);
+void * fb_state(fb_s64 size, void * initial);
+void fb_stext(fb_Style style, const char * content, const char * key);
+void fb_text(const char * content, const char * key);
+fb_Vector2 fb_to_bottom(void);
+fb_Vector2 fb_to_bottom_left(void);
+fb_Vector2 fb_to_bottom_right(void);
+fb_Vector2 fb_to_left(void);
+fb_Vector2 fb_to_right(void);
+fb_Vector2 fb_to_top(void);
+fb_Vector2 fb_to_top_left(void);
+fb_Vector2 fb_to_top_right(void);
+fb_Sides fb_top_sides(float value);
+void fb_update_backend(fb_Windows_GL_Backend * backend);
+void fb_use_scrolling(fb_Scrolling_State * state);
+typedef struct fb_Spring_Config_float fb_Spring_Config_float;
+struct fb_Spring_Config_float {
+    float stiffness;
+    float damping;
+    float mass;
+    float * current;
 };
-_Static_assert(sizeof(fb_Gradient_Stop) == 20, "fb_Gradient_Stop");
-_Static_assert(FB_OFFSETOF(fb_Gradient_Stop, color) == 0, "fb_Gradient_Stop.color");
-_Static_assert(FB_OFFSETOF(fb_Gradient_Stop, position) == 16, "fb_Gradient_Stop.position");
+_Static_assert(sizeof(fb_Spring_Config_float) == 24, "fb_Spring_Config_float");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, stiffness) == 0, "fb_Spring_Config_float.stiffness");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, damping) == 4, "fb_Spring_Config_float.damping");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, mass) == 8, "fb_Spring_Config_float.mass");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, current) == 16, "fb_Spring_Config_float.current");
 
-typedef struct { fb_s64 count; fb_Gradient_Stop *data; } fb_View_Gradient_Stop;
-
-struct fb_Linear_Gradient {
-    fb_View_Gradient_Stop stops;
-    fb_Vector2 direction;
+float fb_use_spring_transition_f(float target, fb_Spring_Config_float config);
+typedef struct fb_Spring_Config_Vector2 fb_Spring_Config_Vector2;
+struct fb_Spring_Config_Vector2 {
+    float stiffness;
+    float damping;
+    float mass;
+    fb_Vector2 * current;
 };
-_Static_assert(sizeof(fb_Linear_Gradient) == 24, "fb_Linear_Gradient");
-_Static_assert(FB_OFFSETOF(fb_Linear_Gradient, stops) == 0, "fb_Linear_Gradient.stops");
-_Static_assert(FB_OFFSETOF(fb_Linear_Gradient, direction) == 16, "fb_Linear_Gradient.direction");
+_Static_assert(sizeof(fb_Spring_Config_Vector2) == 24, "fb_Spring_Config_Vector2");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, stiffness) == 0, "fb_Spring_Config_Vector2.stiffness");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, damping) == 4, "fb_Spring_Config_Vector2.damping");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, mass) == 8, "fb_Spring_Config_Vector2.mass");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, current) == 16, "fb_Spring_Config_Vector2.current");
 
-struct fb_Background {
-    fb_Background_Kind kind;
-    union {
-    fb_Vector4 color;
-    fb_Linear_Gradient gradient;
-    };
+fb_Vector2 fb_use_spring_transition_v2(fb_Vector2 target, fb_Spring_Config_Vector2 config);
+typedef struct fb_Spring_Config_Vector3 fb_Spring_Config_Vector3;
+struct fb_Spring_Config_Vector3 {
+    float stiffness;
+    float damping;
+    float mass;
+    fb_Vector3 * current;
 };
-_Static_assert(sizeof(fb_Background) == 32, "fb_Background");
-_Static_assert(FB_OFFSETOF(fb_Background, kind) == 0, "fb_Background.kind");
+_Static_assert(sizeof(fb_Spring_Config_Vector3) == 24, "fb_Spring_Config_Vector3");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, stiffness) == 0, "fb_Spring_Config_Vector3.stiffness");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, damping) == 4, "fb_Spring_Config_Vector3.damping");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, mass) == 8, "fb_Spring_Config_Vector3.mass");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, current) == 16, "fb_Spring_Config_Vector3.current");
 
-typedef struct fb_Sides fb_Sides;
-struct fb_Sides {
-    fb_Vector2 x;
-    fb_Vector2 y;
+fb_Vector3 fb_use_spring_transition_v3(fb_Vector3 target, fb_Spring_Config_Vector3 config);
+typedef struct fb_Spring_Config_Vector4 fb_Spring_Config_Vector4;
+struct fb_Spring_Config_Vector4 {
+    float stiffness;
+    float damping;
+    float mass;
+    fb_Vector4 * current;
 };
-_Static_assert(sizeof(fb_Sides) == 16, "fb_Sides");
-_Static_assert(FB_OFFSETOF(fb_Sides, x) == 0, "fb_Sides.x");
-_Static_assert(FB_OFFSETOF(fb_Sides, y) == 8, "fb_Sides.y");
+_Static_assert(sizeof(fb_Spring_Config_Vector4) == 24, "fb_Spring_Config_Vector4");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, stiffness) == 0, "fb_Spring_Config_Vector4.stiffness");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, damping) == 4, "fb_Spring_Config_Vector4.damping");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, mass) == 8, "fb_Spring_Config_Vector4.mass");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, current) == 16, "fb_Spring_Config_Vector4.current");
 
-typedef fb_u32 fb_Border_Style;
-#define FB_BORDER_STYLE_SOLID 0
-#define FB_BORDER_STYLE_DASHED 1
+fb_Vector4 fb_use_spring_transition_v4(fb_Vector4 target, fb_Spring_Config_Vector4 config);
+typedef float (*fb_Proc_float_float)(float);
+float fb_use_transition_f(float value, float duration, fb_Proc_float_float easing);
+fb_Vector2 fb_use_transition_v2(fb_Vector2 value, float duration, fb_Proc_float_float easing);
+fb_Vector3 fb_use_transition_v3(fb_Vector3 value, float duration, fb_Proc_float_float easing);
+fb_Vector4 fb_use_transition_v4(fb_Vector4 value, float duration, fb_Proc_float_float easing);
+fb_Sides fb_with_block_sides(fb_Sides sides, float value);
+fb_Sides fb_with_bottom_sides(fb_Sides sides, float value);
+fb_Sides fb_with_in_line_sides(fb_Sides sides, float value);
+fb_Sides fb_with_left_sides(fb_Sides sides, float value);
+fb_Sides fb_with_right_sides(fb_Sides sides, float value);
+fb_Sides fb_with_top_sides(fb_Sides sides, float value);
+#endif
 
-typedef struct fb_Shadow fb_Shadow;
-struct fb_Shadow {
-    fb_Sides offset;
-    float blur_radius;
-    float spread;
-    fb_Vector4 color;
-};
-_Static_assert(sizeof(fb_Shadow) == 40, "fb_Shadow");
-_Static_assert(FB_OFFSETOF(fb_Shadow, offset) == 0, "fb_Shadow.offset");
-_Static_assert(FB_OFFSETOF(fb_Shadow, blur_radius) == 16, "fb_Shadow.blur_radius");
-_Static_assert(FB_OFFSETOF(fb_Shadow, spread) == 20, "fb_Shadow.spread");
-_Static_assert(FB_OFFSETOF(fb_Shadow, color) == 24, "fb_Shadow.color");
-
+#if defined(__linux__)
+typedef struct { fb_s64 count; fb_u8 *data; } fb_String;
+typedef struct fb_Base_Style fb_Base_Style;
 typedef struct fb_Font fb_Font;
 struct fb_Font {
     fb_String memory;
@@ -2556,6 +2438,19 @@ typedef fb_u32 fb_Text_Direction;
 #define FB_TEXT_DIRECTION_LEFT_TO_RIGHT 1
 #define FB_TEXT_DIRECTION_RIGHT_TO_LEFT 2
 
+typedef struct fb_Vector4 fb_Vector4;
+struct fb_Vector4 {
+    float x;
+    float y;
+    float z;
+    float w;
+};
+_Static_assert(sizeof(fb_Vector4) == 16, "fb_Vector4");
+_Static_assert(FB_OFFSETOF(fb_Vector4, x) == 0, "fb_Vector4.x");
+_Static_assert(FB_OFFSETOF(fb_Vector4, y) == 4, "fb_Vector4.y");
+_Static_assert(FB_OFFSETOF(fb_Vector4, z) == 8, "fb_Vector4.z");
+_Static_assert(FB_OFFSETOF(fb_Vector4, w) == 12, "fb_Vector4.w");
+
 typedef struct fb_Line_Height fb_Line_Height;
 typedef fb_u8 fb_Line_Height_Kind;
 #define FB_LINE_HEIGHT_KIND_PERCENTAGE 0
@@ -2590,6 +2485,99 @@ typedef fb_u8 fb_Cursor;
 #define FB_CURSOR_NS_RESIZE 10
 #define FB_CURSOR_NWSE_RESIZE 11
 #define FB_CURSOR_NESW_RESIZE 12
+
+struct fb_Base_Style {
+    fb_Font * font;
+    fb_Language language;
+    fb_Text_Direction text_direction;
+    fb_Vector4 color;
+    float font_size;
+    fb_u16 font_weight;
+    fb_Line_Height line_height;
+    fb_Text_Wrapping text_wrapping;
+    fb_Cursor cursor;
+};
+_Static_assert(sizeof(fb_Base_Style) == 56, "fb_Base_Style");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, font) == 0, "fb_Base_Style.font");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, language) == 8, "fb_Base_Style.language");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, text_direction) == 12, "fb_Base_Style.text_direction");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, color) == 16, "fb_Base_Style.color");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, font_size) == 32, "fb_Base_Style.font_size");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, font_weight) == 36, "fb_Base_Style.font_weight");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, line_height) == 40, "fb_Base_Style.line_height");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, text_wrapping) == 48, "fb_Base_Style.text_wrapping");
+_Static_assert(FB_OFFSETOF(fb_Base_Style, cursor) == 49, "fb_Base_Style.cursor");
+
+typedef struct fb_Complete_Style fb_Complete_Style;
+typedef struct fb_Background fb_Background;
+typedef fb_u8 fb_Background_Kind;
+#define FB_BACKGROUND_KIND_COLOR 0
+#define FB_BACKGROUND_KIND_GRADIENT 1
+
+typedef struct fb_Linear_Gradient fb_Linear_Gradient;
+typedef struct fb_Gradient_Stop fb_Gradient_Stop;
+struct fb_Gradient_Stop {
+    fb_Vector4 color;
+    float position;
+};
+_Static_assert(sizeof(fb_Gradient_Stop) == 20, "fb_Gradient_Stop");
+_Static_assert(FB_OFFSETOF(fb_Gradient_Stop, color) == 0, "fb_Gradient_Stop.color");
+_Static_assert(FB_OFFSETOF(fb_Gradient_Stop, position) == 16, "fb_Gradient_Stop.position");
+
+typedef struct { fb_s64 count; fb_Gradient_Stop *data; } fb_View_Gradient_Stop;
+
+typedef struct fb_Vector2 fb_Vector2;
+struct fb_Vector2 {
+    float x;
+    float y;
+};
+_Static_assert(sizeof(fb_Vector2) == 8, "fb_Vector2");
+_Static_assert(FB_OFFSETOF(fb_Vector2, x) == 0, "fb_Vector2.x");
+_Static_assert(FB_OFFSETOF(fb_Vector2, y) == 4, "fb_Vector2.y");
+
+struct fb_Linear_Gradient {
+    fb_View_Gradient_Stop stops;
+    fb_Vector2 direction;
+};
+_Static_assert(sizeof(fb_Linear_Gradient) == 24, "fb_Linear_Gradient");
+_Static_assert(FB_OFFSETOF(fb_Linear_Gradient, stops) == 0, "fb_Linear_Gradient.stops");
+_Static_assert(FB_OFFSETOF(fb_Linear_Gradient, direction) == 16, "fb_Linear_Gradient.direction");
+
+struct fb_Background {
+    fb_Background_Kind kind;
+    union {
+    fb_Vector4 color;
+    fb_Linear_Gradient gradient;
+    };
+};
+_Static_assert(sizeof(fb_Background) == 32, "fb_Background");
+_Static_assert(FB_OFFSETOF(fb_Background, kind) == 0, "fb_Background.kind");
+
+typedef struct fb_Sides fb_Sides;
+struct fb_Sides {
+    fb_Vector2 x;
+    fb_Vector2 y;
+};
+_Static_assert(sizeof(fb_Sides) == 16, "fb_Sides");
+_Static_assert(FB_OFFSETOF(fb_Sides, x) == 0, "fb_Sides.x");
+_Static_assert(FB_OFFSETOF(fb_Sides, y) == 8, "fb_Sides.y");
+
+typedef fb_u32 fb_Border_Style;
+#define FB_BORDER_STYLE_SOLID 0
+#define FB_BORDER_STYLE_DASHED 1
+
+typedef struct fb_Shadow fb_Shadow;
+struct fb_Shadow {
+    fb_Sides offset;
+    float blur_radius;
+    float spread;
+    fb_Vector4 color;
+};
+_Static_assert(sizeof(fb_Shadow) == 40, "fb_Shadow");
+_Static_assert(FB_OFFSETOF(fb_Shadow, offset) == 0, "fb_Shadow.offset");
+_Static_assert(FB_OFFSETOF(fb_Shadow, blur_radius) == 16, "fb_Shadow.blur_radius");
+_Static_assert(FB_OFFSETOF(fb_Shadow, spread) == 20, "fb_Shadow.spread");
+_Static_assert(FB_OFFSETOF(fb_Shadow, color) == 24, "fb_Shadow.color");
 
 typedef fb_u8 fb_Overflow;
 #define FB_OVERFLOW_VISIBLE 0
@@ -2711,290 +2699,6 @@ _Static_assert(FB_OFFSETOF(fb_Complete_Style, direction) == 260, "fb_Complete_St
 _Static_assert(FB_OFFSETOF(fb_Complete_Style, x_justification) == 261, "fb_Complete_Style.x_justification");
 _Static_assert(FB_OFFSETOF(fb_Complete_Style, y_justification) == 262, "fb_Complete_Style.y_justification");
 
-typedef struct fb_Style fb_Style;
-struct fb_Style {
-    fb_Background background;
-    fb_Vector4 color;
-    float border_radius;
-    fb_Vector4 border_color;
-    fb_Sides border_width;
-    fb_Border_Style border_style;
-    fb_Shadow shadow;
-    fb_Font * font;
-    fb_u16 font_weight;
-    float font_size;
-    fb_Line_Height line_height;
-    fb_Text_Wrapping text_wrapping;
-    fb_Language language;
-    fb_Text_Direction text_direction;
-    fb_Cursor cursor;
-    fb_Overflow overflow;
-    fb_Placement placement;
-    fb_u16 z_index;
-    float min_width;
-    float max_width;
-    fb_Sizing width;
-    float min_height;
-    float max_height;
-    fb_Sizing height;
-    fb_Vector2 translate;
-    fb_Vector2 children_offset;
-    fb_Sides padding;
-    fb_Sides margin;
-    fb_Alignment x_justification;
-    fb_Alignment y_justification;
-    fb_Direction direction;
-};
-_Static_assert(sizeof(fb_Style) == 272, "fb_Style");
-_Static_assert(FB_OFFSETOF(fb_Style, background) == 0, "fb_Style.background");
-_Static_assert(FB_OFFSETOF(fb_Style, color) == 32, "fb_Style.color");
-_Static_assert(FB_OFFSETOF(fb_Style, border_radius) == 48, "fb_Style.border_radius");
-_Static_assert(FB_OFFSETOF(fb_Style, border_color) == 52, "fb_Style.border_color");
-_Static_assert(FB_OFFSETOF(fb_Style, border_width) == 68, "fb_Style.border_width");
-_Static_assert(FB_OFFSETOF(fb_Style, border_style) == 84, "fb_Style.border_style");
-_Static_assert(FB_OFFSETOF(fb_Style, shadow) == 88, "fb_Style.shadow");
-_Static_assert(FB_OFFSETOF(fb_Style, font) == 128, "fb_Style.font");
-_Static_assert(FB_OFFSETOF(fb_Style, font_weight) == 136, "fb_Style.font_weight");
-_Static_assert(FB_OFFSETOF(fb_Style, font_size) == 140, "fb_Style.font_size");
-_Static_assert(FB_OFFSETOF(fb_Style, line_height) == 144, "fb_Style.line_height");
-_Static_assert(FB_OFFSETOF(fb_Style, text_wrapping) == 152, "fb_Style.text_wrapping");
-_Static_assert(FB_OFFSETOF(fb_Style, language) == 156, "fb_Style.language");
-_Static_assert(FB_OFFSETOF(fb_Style, text_direction) == 160, "fb_Style.text_direction");
-_Static_assert(FB_OFFSETOF(fb_Style, cursor) == 164, "fb_Style.cursor");
-_Static_assert(FB_OFFSETOF(fb_Style, overflow) == 165, "fb_Style.overflow");
-_Static_assert(FB_OFFSETOF(fb_Style, placement) == 168, "fb_Style.placement");
-_Static_assert(FB_OFFSETOF(fb_Style, z_index) == 180, "fb_Style.z_index");
-_Static_assert(FB_OFFSETOF(fb_Style, min_width) == 184, "fb_Style.min_width");
-_Static_assert(FB_OFFSETOF(fb_Style, max_width) == 188, "fb_Style.max_width");
-_Static_assert(FB_OFFSETOF(fb_Style, width) == 192, "fb_Style.width");
-_Static_assert(FB_OFFSETOF(fb_Style, min_height) == 200, "fb_Style.min_height");
-_Static_assert(FB_OFFSETOF(fb_Style, max_height) == 204, "fb_Style.max_height");
-_Static_assert(FB_OFFSETOF(fb_Style, height) == 208, "fb_Style.height");
-_Static_assert(FB_OFFSETOF(fb_Style, translate) == 216, "fb_Style.translate");
-_Static_assert(FB_OFFSETOF(fb_Style, children_offset) == 224, "fb_Style.children_offset");
-_Static_assert(FB_OFFSETOF(fb_Style, padding) == 232, "fb_Style.padding");
-_Static_assert(FB_OFFSETOF(fb_Style, margin) == 248, "fb_Style.margin");
-_Static_assert(FB_OFFSETOF(fb_Style, x_justification) == 264, "fb_Style.x_justification");
-_Static_assert(FB_OFFSETOF(fb_Style, y_justification) == 265, "fb_Style.y_justification");
-_Static_assert(FB_OFFSETOF(fb_Style, direction) == 266, "fb_Style.direction");
-
-typedef struct fb_Wayland_EGL_Backend fb_Wayland_EGL_Backend;
-typedef struct fb_Allocator fb_Allocator;
-struct fb_Allocator {
-    _Alignas(8) fb_u8 proc[8];
-    void * data;
-};
-_Static_assert(sizeof(fb_Allocator) == 16, "fb_Allocator");
-_Static_assert(FB_OFFSETOF(fb_Allocator, proc) == 0, "fb_Allocator.proc");
-_Static_assert(FB_OFFSETOF(fb_Allocator, data) == 8, "fb_Allocator.data");
-
-typedef struct { fb_s64 count; fb_u64 *data; fb_s64 allocated; fb_Allocator allocator; } fb_Array_u64;
-
-typedef struct fb_Wayland_Connection fb_Wayland_Connection;
-typedef struct fb_pollfd fb_pollfd;
-struct fb_pollfd {
-    fb_s32 fd;
-    fb_s16 events;
-    fb_s16 revents;
-};
-_Static_assert(sizeof(fb_pollfd) == 8, "fb_pollfd");
-_Static_assert(FB_OFFSETOF(fb_pollfd, fd) == 0, "fb_pollfd.fd");
-_Static_assert(FB_OFFSETOF(fb_pollfd, events) == 4, "fb_pollfd.events");
-_Static_assert(FB_OFFSETOF(fb_pollfd, revents) == 6, "fb_pollfd.revents");
-
-typedef struct { fb_s64 count; fb_u8 *data; } fb_View_u8;
-
-typedef struct { fb_s64 count; fb_s32 *data; } fb_View_s32;
-
-typedef fb_u32 fb_Interface_Id;
-#define FB_INTERFACE_ID_WL_DISPLAY 0
-#define FB_INTERFACE_ID_WL_REGISTRY 1
-#define FB_INTERFACE_ID_WL_CALLBACK 2
-#define FB_INTERFACE_ID_WL_COMPOSITOR 3
-#define FB_INTERFACE_ID_WL_SHM_POOL 4
-#define FB_INTERFACE_ID_WL_SHM 5
-#define FB_INTERFACE_ID_WL_BUFFER 6
-#define FB_INTERFACE_ID_WL_DATA_OFFER 7
-#define FB_INTERFACE_ID_WL_DATA_SOURCE 8
-#define FB_INTERFACE_ID_WL_DATA_DEVICE 9
-#define FB_INTERFACE_ID_WL_DATA_DEVICE_MANAGER 10
-#define FB_INTERFACE_ID_WL_SHELL 11
-#define FB_INTERFACE_ID_WL_SHELL_SURFACE 12
-#define FB_INTERFACE_ID_WL_SURFACE 13
-#define FB_INTERFACE_ID_WL_SEAT 14
-#define FB_INTERFACE_ID_WL_POINTER 15
-#define FB_INTERFACE_ID_WL_KEYBOARD 16
-#define FB_INTERFACE_ID_WL_TOUCH 17
-#define FB_INTERFACE_ID_WL_OUTPUT 18
-#define FB_INTERFACE_ID_WL_REGION 19
-#define FB_INTERFACE_ID_WL_SUBCOMPOSITOR 20
-#define FB_INTERFACE_ID_WL_SUBSURFACE 21
-#define FB_INTERFACE_ID_WL_FIXES 22
-#define FB_INTERFACE_ID_XDG_WM_BASE 23
-#define FB_INTERFACE_ID_XDG_POSITIONER 24
-#define FB_INTERFACE_ID_XDG_SURFACE 25
-#define FB_INTERFACE_ID_XDG_TOPLEVEL 26
-#define FB_INTERFACE_ID_XDG_POPUP 27
-#define FB_INTERFACE_ID_ZWP_LINUX_DMABUF_V1 28
-#define FB_INTERFACE_ID_ZWP_LINUX_BUFFER_PARAMS_V1 29
-#define FB_INTERFACE_ID_ZWP_LINUX_DMABUF_FEEDBACK_V1 30
-#define FB_INTERFACE_ID_WP_VIEWPORTER 31
-#define FB_INTERFACE_ID_WP_VIEWPORT 32
-#define FB_INTERFACE_ID_WP_FRACTIONAL_SCALE_MANAGER_V1 33
-#define FB_INTERFACE_ID_WP_FRACTIONAL_SCALE_V1 34
-#define FB_INTERFACE_ID_WP_CURSOR_SHAPE_MANAGER_V1 35
-#define FB_INTERFACE_ID_WP_CURSOR_SHAPE_DEVICE_V1 36
-
-typedef struct { fb_s64 count; fb_Interface_Id *data; fb_s64 allocated; fb_Allocator allocator; } fb_Array_Interface_Id;
-
-typedef struct { fb_s64 count; fb_s64 *data; fb_s64 allocated; fb_Allocator allocator; } fb_Array_s64;
-
-struct fb_Wayland_Connection {
-    fb_s32 fd;
-    fb_pollfd polling_fd;
-    fb_u32 wl_compositor_id;
-    fb_u32 wl_data_device_id;
-    fb_u32 wl_data_device_manager_id;
-    fb_u32 wl_display_id;
-    fb_u32 wl_keyboard_id;
-    fb_u32 wl_pointer_id;
-    fb_u32 wl_registry_id;
-    fb_u32 wl_seat_id;
-    fb_u32 wp_cursor_shape_device_id;
-    fb_u32 wp_cursor_shape_manager_id;
-    fb_u32 wp_fractional_scale_manager_id;
-    fb_u32 wp_viewporter_id;
-    fb_u32 xdg_wm_base_id;
-    fb_u32 zwp_dmabuf_id;
-    void * xkb;
-    void * keymap;
-    void * key_state;
-    void * compose_table;
-    void * compose_state;
-    fb_u8 reading_buffer[4096];
-    fb_View_u8 pending_reads;
-    fb_s32 reading_fds_buffer[8];
-    fb_View_s32 pending_read_fds;
-    fb_Array_Interface_Id client_object_interfaces;
-    fb_Array_s64 free_client_object_interface_ids;
-    fb_Array_Interface_Id server_object_interfaces;
-};
-_Static_assert(sizeof(fb_Wayland_Connection) == 4392, "fb_Wayland_Connection");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, fd) == 0, "fb_Wayland_Connection.fd");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, polling_fd) == 4, "fb_Wayland_Connection.polling_fd");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_compositor_id) == 12, "fb_Wayland_Connection.wl_compositor_id");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_data_device_id) == 16, "fb_Wayland_Connection.wl_data_device_id");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_data_device_manager_id) == 20, "fb_Wayland_Connection.wl_data_device_manager_id");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_display_id) == 24, "fb_Wayland_Connection.wl_display_id");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_keyboard_id) == 28, "fb_Wayland_Connection.wl_keyboard_id");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_pointer_id) == 32, "fb_Wayland_Connection.wl_pointer_id");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_registry_id) == 36, "fb_Wayland_Connection.wl_registry_id");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_seat_id) == 40, "fb_Wayland_Connection.wl_seat_id");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wp_cursor_shape_device_id) == 44, "fb_Wayland_Connection.wp_cursor_shape_device_id");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wp_cursor_shape_manager_id) == 48, "fb_Wayland_Connection.wp_cursor_shape_manager_id");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wp_fractional_scale_manager_id) == 52, "fb_Wayland_Connection.wp_fractional_scale_manager_id");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wp_viewporter_id) == 56, "fb_Wayland_Connection.wp_viewporter_id");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, xdg_wm_base_id) == 60, "fb_Wayland_Connection.xdg_wm_base_id");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, zwp_dmabuf_id) == 64, "fb_Wayland_Connection.zwp_dmabuf_id");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, xkb) == 72, "fb_Wayland_Connection.xkb");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, keymap) == 80, "fb_Wayland_Connection.keymap");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, key_state) == 88, "fb_Wayland_Connection.key_state");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, compose_table) == 96, "fb_Wayland_Connection.compose_table");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, compose_state) == 104, "fb_Wayland_Connection.compose_state");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, reading_buffer) == 112, "fb_Wayland_Connection.reading_buffer");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, pending_reads) == 4208, "fb_Wayland_Connection.pending_reads");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, reading_fds_buffer) == 4224, "fb_Wayland_Connection.reading_fds_buffer");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, pending_read_fds) == 4256, "fb_Wayland_Connection.pending_read_fds");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, client_object_interfaces) == 4272, "fb_Wayland_Connection.client_object_interfaces");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, free_client_object_interface_ids) == 4312, "fb_Wayland_Connection.free_client_object_interface_ids");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, server_object_interfaces) == 4352, "fb_Wayland_Connection.server_object_interfaces");
-
-struct fb_Wayland_EGL_Backend {
-    void * egl_display;
-    void * egl_context;
-    fb_s32 dri_fd;
-    void * device;
-    fb_u32 clipboard_selection_serial;
-    fb_String clipboard_text_buffer;
-    _Bool clipboard_mime_is_text;
-    fb_u32 clipboard_wl_data_source_id;
-    fb_String clipboard_text;
-    fb_Array_u64 dmabuf_modifiers;
-    fb_Wayland_Connection connection;
-};
-_Static_assert(sizeof(fb_Wayland_EGL_Backend) == 4512, "fb_Wayland_EGL_Backend");
-_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, egl_display) == 0, "fb_Wayland_EGL_Backend.egl_display");
-_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, egl_context) == 8, "fb_Wayland_EGL_Backend.egl_context");
-_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, dri_fd) == 16, "fb_Wayland_EGL_Backend.dri_fd");
-_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, device) == 24, "fb_Wayland_EGL_Backend.device");
-_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, clipboard_selection_serial) == 32, "fb_Wayland_EGL_Backend.clipboard_selection_serial");
-_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, clipboard_text_buffer) == 40, "fb_Wayland_EGL_Backend.clipboard_text_buffer");
-_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, clipboard_mime_is_text) == 56, "fb_Wayland_EGL_Backend.clipboard_mime_is_text");
-_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, clipboard_wl_data_source_id) == 60, "fb_Wayland_EGL_Backend.clipboard_wl_data_source_id");
-_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, clipboard_text) == 64, "fb_Wayland_EGL_Backend.clipboard_text");
-_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, dmabuf_modifiers) == 80, "fb_Wayland_EGL_Backend.dmabuf_modifiers");
-_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, connection) == 120, "fb_Wayland_EGL_Backend.connection");
-
-typedef struct fb_Base_Style fb_Base_Style;
-struct fb_Base_Style {
-    fb_Font * font;
-    fb_Language language;
-    fb_Text_Direction text_direction;
-    fb_Vector4 color;
-    float font_size;
-    fb_u16 font_weight;
-    fb_Line_Height line_height;
-    fb_Text_Wrapping text_wrapping;
-    fb_Cursor cursor;
-};
-_Static_assert(sizeof(fb_Base_Style) == 56, "fb_Base_Style");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, font) == 0, "fb_Base_Style.font");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, language) == 8, "fb_Base_Style.language");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, text_direction) == 12, "fb_Base_Style.text_direction");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, color) == 16, "fb_Base_Style.color");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, font_size) == 32, "fb_Base_Style.font_size");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, font_weight) == 36, "fb_Base_Style.font_weight");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, line_height) == 40, "fb_Base_Style.line_height");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, text_wrapping) == 48, "fb_Base_Style.text_wrapping");
-_Static_assert(FB_OFFSETOF(fb_Base_Style, cursor) == 49, "fb_Base_Style.cursor");
-
-typedef struct fb_Node_Opening_Data fb_Node_Opening_Data;
-struct fb_Node_Opening_Data {
-    fb_s64 parent_index;
-    fb_u64 scope_key;
-    fb_Base_Style base_style;
-    fb_s64 node_index;
-};
-_Static_assert(sizeof(fb_Node_Opening_Data) == 80, "fb_Node_Opening_Data");
-_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, parent_index) == 0, "fb_Node_Opening_Data.parent_index");
-_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, scope_key) == 8, "fb_Node_Opening_Data.scope_key");
-_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, base_style) == 16, "fb_Node_Opening_Data.base_style");
-_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, node_index) == 72, "fb_Node_Opening_Data.node_index");
-
-typedef struct fb_Wayland_Event fb_Wayland_Event;
-typedef struct fb_Message_Info fb_Message_Info;
-struct fb_Message_Info {
-    void * type;
-    fb_s32 first_arg;
-    fb_s32 arg_count;
-};
-_Static_assert(sizeof(fb_Message_Info) == 16, "fb_Message_Info");
-_Static_assert(FB_OFFSETOF(fb_Message_Info, type) == 0, "fb_Message_Info.type");
-_Static_assert(FB_OFFSETOF(fb_Message_Info, first_arg) == 8, "fb_Message_Info.first_arg");
-_Static_assert(FB_OFFSETOF(fb_Message_Info, arg_count) == 12, "fb_Message_Info.arg_count");
-
-struct fb_Wayland_Event {
-    _Bool something;
-    fb_Message_Info message;
-    void * data;
-    fb_u32 object_id;
-};
-_Static_assert(sizeof(fb_Wayland_Event) == 40, "fb_Wayland_Event");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Event, something) == 0, "fb_Wayland_Event.something");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Event, message) == 8, "fb_Wayland_Event.message");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Event, data) == 24, "fb_Wayland_Event.data");
-_Static_assert(FB_OFFSETOF(fb_Wayland_Event, object_id) == 32, "fb_Wayland_Event.object_id");
-
 typedef struct fb_Forbear fb_Forbear;
 typedef struct fb_Node fb_Node;
 typedef fb_s64 fb_Node_Kind;
@@ -3034,7 +2738,18 @@ _Static_assert(FB_OFFSETOF(fb_Glyph, position) == 32, "fb_Glyph.position");
 _Static_assert(FB_OFFSETOF(fb_Glyph, advance) == 40, "fb_Glyph.advance");
 _Static_assert(FB_OFFSETOF(fb_Glyph, offset) == 48, "fb_Glyph.offset");
 
+typedef struct fb_Allocator fb_Allocator;
+struct fb_Allocator {
+    _Alignas(8) fb_u8 proc[8];
+    void * data;
+};
+_Static_assert(sizeof(fb_Allocator) == 16, "fb_Allocator");
+_Static_assert(FB_OFFSETOF(fb_Allocator, proc) == 0, "fb_Allocator.proc");
+_Static_assert(FB_OFFSETOF(fb_Allocator, data) == 8, "fb_Allocator.data");
+
 typedef struct { fb_s64 count; fb_Glyph *data; fb_s64 allocated; fb_Allocator allocator; } fb_Array_Glyph;
+
+typedef struct { fb_s64 count; fb_s64 *data; fb_s64 allocated; fb_Allocator allocator; } fb_Array_s64;
 
 struct fb_Glyphs {
     fb_u64 hash;
@@ -3413,6 +3128,152 @@ _Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Window, current) == 9080, "fb_Wayland_
 _Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Window, waiting_for_vblank) == 9088, "fb_Wayland_EGL_Window.waiting_for_vblank");
 _Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Window, running) == 9089, "fb_Wayland_EGL_Window.running");
 
+typedef struct fb_Wayland_EGL_Backend fb_Wayland_EGL_Backend;
+typedef struct { fb_s64 count; fb_u64 *data; fb_s64 allocated; fb_Allocator allocator; } fb_Array_u64;
+
+typedef struct fb_Wayland_Connection fb_Wayland_Connection;
+typedef struct fb_pollfd fb_pollfd;
+struct fb_pollfd {
+    fb_s32 fd;
+    fb_s16 events;
+    fb_s16 revents;
+};
+_Static_assert(sizeof(fb_pollfd) == 8, "fb_pollfd");
+_Static_assert(FB_OFFSETOF(fb_pollfd, fd) == 0, "fb_pollfd.fd");
+_Static_assert(FB_OFFSETOF(fb_pollfd, events) == 4, "fb_pollfd.events");
+_Static_assert(FB_OFFSETOF(fb_pollfd, revents) == 6, "fb_pollfd.revents");
+
+typedef struct { fb_s64 count; fb_u8 *data; } fb_View_u8;
+
+typedef struct { fb_s64 count; fb_s32 *data; } fb_View_s32;
+
+typedef fb_u32 fb_Interface_Id;
+#define FB_INTERFACE_ID_WL_DISPLAY 0
+#define FB_INTERFACE_ID_WL_REGISTRY 1
+#define FB_INTERFACE_ID_WL_CALLBACK 2
+#define FB_INTERFACE_ID_WL_COMPOSITOR 3
+#define FB_INTERFACE_ID_WL_SHM_POOL 4
+#define FB_INTERFACE_ID_WL_SHM 5
+#define FB_INTERFACE_ID_WL_BUFFER 6
+#define FB_INTERFACE_ID_WL_DATA_OFFER 7
+#define FB_INTERFACE_ID_WL_DATA_SOURCE 8
+#define FB_INTERFACE_ID_WL_DATA_DEVICE 9
+#define FB_INTERFACE_ID_WL_DATA_DEVICE_MANAGER 10
+#define FB_INTERFACE_ID_WL_SHELL 11
+#define FB_INTERFACE_ID_WL_SHELL_SURFACE 12
+#define FB_INTERFACE_ID_WL_SURFACE 13
+#define FB_INTERFACE_ID_WL_SEAT 14
+#define FB_INTERFACE_ID_WL_POINTER 15
+#define FB_INTERFACE_ID_WL_KEYBOARD 16
+#define FB_INTERFACE_ID_WL_TOUCH 17
+#define FB_INTERFACE_ID_WL_OUTPUT 18
+#define FB_INTERFACE_ID_WL_REGION 19
+#define FB_INTERFACE_ID_WL_SUBCOMPOSITOR 20
+#define FB_INTERFACE_ID_WL_SUBSURFACE 21
+#define FB_INTERFACE_ID_WL_FIXES 22
+#define FB_INTERFACE_ID_XDG_WM_BASE 23
+#define FB_INTERFACE_ID_XDG_POSITIONER 24
+#define FB_INTERFACE_ID_XDG_SURFACE 25
+#define FB_INTERFACE_ID_XDG_TOPLEVEL 26
+#define FB_INTERFACE_ID_XDG_POPUP 27
+#define FB_INTERFACE_ID_ZWP_LINUX_DMABUF_V1 28
+#define FB_INTERFACE_ID_ZWP_LINUX_BUFFER_PARAMS_V1 29
+#define FB_INTERFACE_ID_ZWP_LINUX_DMABUF_FEEDBACK_V1 30
+#define FB_INTERFACE_ID_WP_VIEWPORTER 31
+#define FB_INTERFACE_ID_WP_VIEWPORT 32
+#define FB_INTERFACE_ID_WP_FRACTIONAL_SCALE_MANAGER_V1 33
+#define FB_INTERFACE_ID_WP_FRACTIONAL_SCALE_V1 34
+#define FB_INTERFACE_ID_WP_CURSOR_SHAPE_MANAGER_V1 35
+#define FB_INTERFACE_ID_WP_CURSOR_SHAPE_DEVICE_V1 36
+
+typedef struct { fb_s64 count; fb_Interface_Id *data; fb_s64 allocated; fb_Allocator allocator; } fb_Array_Interface_Id;
+
+struct fb_Wayland_Connection {
+    fb_s32 fd;
+    fb_pollfd polling_fd;
+    fb_u32 wl_compositor_id;
+    fb_u32 wl_data_device_id;
+    fb_u32 wl_data_device_manager_id;
+    fb_u32 wl_display_id;
+    fb_u32 wl_keyboard_id;
+    fb_u32 wl_pointer_id;
+    fb_u32 wl_registry_id;
+    fb_u32 wl_seat_id;
+    fb_u32 wp_cursor_shape_device_id;
+    fb_u32 wp_cursor_shape_manager_id;
+    fb_u32 wp_fractional_scale_manager_id;
+    fb_u32 wp_viewporter_id;
+    fb_u32 xdg_wm_base_id;
+    fb_u32 zwp_dmabuf_id;
+    void * xkb;
+    void * keymap;
+    void * key_state;
+    void * compose_table;
+    void * compose_state;
+    fb_u8 reading_buffer[4096];
+    fb_View_u8 pending_reads;
+    fb_s32 reading_fds_buffer[8];
+    fb_View_s32 pending_read_fds;
+    fb_Array_Interface_Id client_object_interfaces;
+    fb_Array_s64 free_client_object_interface_ids;
+    fb_Array_Interface_Id server_object_interfaces;
+};
+_Static_assert(sizeof(fb_Wayland_Connection) == 4392, "fb_Wayland_Connection");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, fd) == 0, "fb_Wayland_Connection.fd");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, polling_fd) == 4, "fb_Wayland_Connection.polling_fd");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_compositor_id) == 12, "fb_Wayland_Connection.wl_compositor_id");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_data_device_id) == 16, "fb_Wayland_Connection.wl_data_device_id");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_data_device_manager_id) == 20, "fb_Wayland_Connection.wl_data_device_manager_id");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_display_id) == 24, "fb_Wayland_Connection.wl_display_id");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_keyboard_id) == 28, "fb_Wayland_Connection.wl_keyboard_id");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_pointer_id) == 32, "fb_Wayland_Connection.wl_pointer_id");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_registry_id) == 36, "fb_Wayland_Connection.wl_registry_id");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wl_seat_id) == 40, "fb_Wayland_Connection.wl_seat_id");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wp_cursor_shape_device_id) == 44, "fb_Wayland_Connection.wp_cursor_shape_device_id");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wp_cursor_shape_manager_id) == 48, "fb_Wayland_Connection.wp_cursor_shape_manager_id");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wp_fractional_scale_manager_id) == 52, "fb_Wayland_Connection.wp_fractional_scale_manager_id");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, wp_viewporter_id) == 56, "fb_Wayland_Connection.wp_viewporter_id");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, xdg_wm_base_id) == 60, "fb_Wayland_Connection.xdg_wm_base_id");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, zwp_dmabuf_id) == 64, "fb_Wayland_Connection.zwp_dmabuf_id");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, xkb) == 72, "fb_Wayland_Connection.xkb");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, keymap) == 80, "fb_Wayland_Connection.keymap");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, key_state) == 88, "fb_Wayland_Connection.key_state");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, compose_table) == 96, "fb_Wayland_Connection.compose_table");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, compose_state) == 104, "fb_Wayland_Connection.compose_state");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, reading_buffer) == 112, "fb_Wayland_Connection.reading_buffer");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, pending_reads) == 4208, "fb_Wayland_Connection.pending_reads");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, reading_fds_buffer) == 4224, "fb_Wayland_Connection.reading_fds_buffer");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, pending_read_fds) == 4256, "fb_Wayland_Connection.pending_read_fds");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, client_object_interfaces) == 4272, "fb_Wayland_Connection.client_object_interfaces");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, free_client_object_interface_ids) == 4312, "fb_Wayland_Connection.free_client_object_interface_ids");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Connection, server_object_interfaces) == 4352, "fb_Wayland_Connection.server_object_interfaces");
+
+struct fb_Wayland_EGL_Backend {
+    void * egl_display;
+    void * egl_context;
+    fb_s32 dri_fd;
+    void * device;
+    fb_u32 clipboard_selection_serial;
+    fb_String clipboard_text_buffer;
+    _Bool clipboard_mime_is_text;
+    fb_u32 clipboard_wl_data_source_id;
+    fb_String clipboard_text;
+    fb_Array_u64 dmabuf_modifiers;
+    fb_Wayland_Connection connection;
+};
+_Static_assert(sizeof(fb_Wayland_EGL_Backend) == 4512, "fb_Wayland_EGL_Backend");
+_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, egl_display) == 0, "fb_Wayland_EGL_Backend.egl_display");
+_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, egl_context) == 8, "fb_Wayland_EGL_Backend.egl_context");
+_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, dri_fd) == 16, "fb_Wayland_EGL_Backend.dri_fd");
+_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, device) == 24, "fb_Wayland_EGL_Backend.device");
+_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, clipboard_selection_serial) == 32, "fb_Wayland_EGL_Backend.clipboard_selection_serial");
+_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, clipboard_text_buffer) == 40, "fb_Wayland_EGL_Backend.clipboard_text_buffer");
+_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, clipboard_mime_is_text) == 56, "fb_Wayland_EGL_Backend.clipboard_mime_is_text");
+_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, clipboard_wl_data_source_id) == 60, "fb_Wayland_EGL_Backend.clipboard_wl_data_source_id");
+_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, clipboard_text) == 64, "fb_Wayland_EGL_Backend.clipboard_text");
+_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, dmabuf_modifiers) == 80, "fb_Wayland_EGL_Backend.dmabuf_modifiers");
+_Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, connection) == 120, "fb_Wayland_EGL_Backend.connection");
+
 struct fb_Forbear {
     fb_Array_Node node_tree;
     fb_Array_Node_Measurement measurements;
@@ -3461,6 +3322,145 @@ _Static_assert(FB_OFFSETOF(fb_Forbear, glyph_atlas) == 18688, "fb_Forbear.glyph_
 _Static_assert(FB_OFFSETOF(fb_Forbear, window) == 18776, "fb_Forbear.window");
 _Static_assert(FB_OFFSETOF(fb_Forbear, backend) == 18784, "fb_Forbear.backend");
 
+typedef struct fb_Node_Opening_Data fb_Node_Opening_Data;
+struct fb_Node_Opening_Data {
+    fb_s64 parent_index;
+    fb_u64 scope_key;
+    fb_Base_Style base_style;
+    fb_s64 node_index;
+};
+_Static_assert(sizeof(fb_Node_Opening_Data) == 80, "fb_Node_Opening_Data");
+_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, parent_index) == 0, "fb_Node_Opening_Data.parent_index");
+_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, scope_key) == 8, "fb_Node_Opening_Data.scope_key");
+_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, base_style) == 16, "fb_Node_Opening_Data.base_style");
+_Static_assert(FB_OFFSETOF(fb_Node_Opening_Data, node_index) == 72, "fb_Node_Opening_Data.node_index");
+
+typedef struct fb_Scrolling_State fb_Scrolling_State;
+typedef struct fb_Scheduled_Scroll fb_Scheduled_Scroll;
+struct fb_Scheduled_Scroll {
+    _Bool defined;
+    _Bool defined_this_frame;
+    fb_Vector2 position;
+    _Bool animate;
+};
+_Static_assert(sizeof(fb_Scheduled_Scroll) == 16, "fb_Scheduled_Scroll");
+_Static_assert(FB_OFFSETOF(fb_Scheduled_Scroll, defined) == 0, "fb_Scheduled_Scroll.defined");
+_Static_assert(FB_OFFSETOF(fb_Scheduled_Scroll, defined_this_frame) == 1, "fb_Scheduled_Scroll.defined_this_frame");
+_Static_assert(FB_OFFSETOF(fb_Scheduled_Scroll, position) == 4, "fb_Scheduled_Scroll.position");
+_Static_assert(FB_OFFSETOF(fb_Scheduled_Scroll, animate) == 12, "fb_Scheduled_Scroll.animate");
+
+struct fb_Scrolling_State {
+    fb_Vector2 offset;
+    fb_Vector2 effective_offset;
+    fb_Scheduled_Scroll scheduled_scroll;
+};
+_Static_assert(sizeof(fb_Scrolling_State) == 32, "fb_Scrolling_State");
+_Static_assert(FB_OFFSETOF(fb_Scrolling_State, offset) == 0, "fb_Scrolling_State.offset");
+_Static_assert(FB_OFFSETOF(fb_Scrolling_State, effective_offset) == 8, "fb_Scrolling_State.effective_offset");
+_Static_assert(FB_OFFSETOF(fb_Scrolling_State, scheduled_scroll) == 16, "fb_Scrolling_State.scheduled_scroll");
+
+typedef struct fb_Style fb_Style;
+struct fb_Style {
+    fb_Background background;
+    fb_Vector4 color;
+    float border_radius;
+    fb_Vector4 border_color;
+    fb_Sides border_width;
+    fb_Border_Style border_style;
+    fb_Shadow shadow;
+    fb_Font * font;
+    fb_u16 font_weight;
+    float font_size;
+    fb_Line_Height line_height;
+    fb_Text_Wrapping text_wrapping;
+    fb_Language language;
+    fb_Text_Direction text_direction;
+    fb_Cursor cursor;
+    fb_Overflow overflow;
+    fb_Placement placement;
+    fb_u16 z_index;
+    float min_width;
+    float max_width;
+    fb_Sizing width;
+    float min_height;
+    float max_height;
+    fb_Sizing height;
+    fb_Vector2 translate;
+    fb_Vector2 children_offset;
+    fb_Sides padding;
+    fb_Sides margin;
+    fb_Alignment x_justification;
+    fb_Alignment y_justification;
+    fb_Direction direction;
+};
+_Static_assert(sizeof(fb_Style) == 272, "fb_Style");
+_Static_assert(FB_OFFSETOF(fb_Style, background) == 0, "fb_Style.background");
+_Static_assert(FB_OFFSETOF(fb_Style, color) == 32, "fb_Style.color");
+_Static_assert(FB_OFFSETOF(fb_Style, border_radius) == 48, "fb_Style.border_radius");
+_Static_assert(FB_OFFSETOF(fb_Style, border_color) == 52, "fb_Style.border_color");
+_Static_assert(FB_OFFSETOF(fb_Style, border_width) == 68, "fb_Style.border_width");
+_Static_assert(FB_OFFSETOF(fb_Style, border_style) == 84, "fb_Style.border_style");
+_Static_assert(FB_OFFSETOF(fb_Style, shadow) == 88, "fb_Style.shadow");
+_Static_assert(FB_OFFSETOF(fb_Style, font) == 128, "fb_Style.font");
+_Static_assert(FB_OFFSETOF(fb_Style, font_weight) == 136, "fb_Style.font_weight");
+_Static_assert(FB_OFFSETOF(fb_Style, font_size) == 140, "fb_Style.font_size");
+_Static_assert(FB_OFFSETOF(fb_Style, line_height) == 144, "fb_Style.line_height");
+_Static_assert(FB_OFFSETOF(fb_Style, text_wrapping) == 152, "fb_Style.text_wrapping");
+_Static_assert(FB_OFFSETOF(fb_Style, language) == 156, "fb_Style.language");
+_Static_assert(FB_OFFSETOF(fb_Style, text_direction) == 160, "fb_Style.text_direction");
+_Static_assert(FB_OFFSETOF(fb_Style, cursor) == 164, "fb_Style.cursor");
+_Static_assert(FB_OFFSETOF(fb_Style, overflow) == 165, "fb_Style.overflow");
+_Static_assert(FB_OFFSETOF(fb_Style, placement) == 168, "fb_Style.placement");
+_Static_assert(FB_OFFSETOF(fb_Style, z_index) == 180, "fb_Style.z_index");
+_Static_assert(FB_OFFSETOF(fb_Style, min_width) == 184, "fb_Style.min_width");
+_Static_assert(FB_OFFSETOF(fb_Style, max_width) == 188, "fb_Style.max_width");
+_Static_assert(FB_OFFSETOF(fb_Style, width) == 192, "fb_Style.width");
+_Static_assert(FB_OFFSETOF(fb_Style, min_height) == 200, "fb_Style.min_height");
+_Static_assert(FB_OFFSETOF(fb_Style, max_height) == 204, "fb_Style.max_height");
+_Static_assert(FB_OFFSETOF(fb_Style, height) == 208, "fb_Style.height");
+_Static_assert(FB_OFFSETOF(fb_Style, translate) == 216, "fb_Style.translate");
+_Static_assert(FB_OFFSETOF(fb_Style, children_offset) == 224, "fb_Style.children_offset");
+_Static_assert(FB_OFFSETOF(fb_Style, padding) == 232, "fb_Style.padding");
+_Static_assert(FB_OFFSETOF(fb_Style, margin) == 248, "fb_Style.margin");
+_Static_assert(FB_OFFSETOF(fb_Style, x_justification) == 264, "fb_Style.x_justification");
+_Static_assert(FB_OFFSETOF(fb_Style, y_justification) == 265, "fb_Style.y_justification");
+_Static_assert(FB_OFFSETOF(fb_Style, direction) == 266, "fb_Style.direction");
+
+typedef struct fb_Vector3 fb_Vector3;
+struct fb_Vector3 {
+    float x;
+    float y;
+    float z;
+};
+_Static_assert(sizeof(fb_Vector3) == 12, "fb_Vector3");
+_Static_assert(FB_OFFSETOF(fb_Vector3, x) == 0, "fb_Vector3.x");
+_Static_assert(FB_OFFSETOF(fb_Vector3, y) == 4, "fb_Vector3.y");
+_Static_assert(FB_OFFSETOF(fb_Vector3, z) == 8, "fb_Vector3.z");
+
+typedef struct fb_Wayland_Event fb_Wayland_Event;
+typedef struct fb_Message_Info fb_Message_Info;
+struct fb_Message_Info {
+    void * type;
+    fb_s32 first_arg;
+    fb_s32 arg_count;
+};
+_Static_assert(sizeof(fb_Message_Info) == 16, "fb_Message_Info");
+_Static_assert(FB_OFFSETOF(fb_Message_Info, type) == 0, "fb_Message_Info.type");
+_Static_assert(FB_OFFSETOF(fb_Message_Info, first_arg) == 8, "fb_Message_Info.first_arg");
+_Static_assert(FB_OFFSETOF(fb_Message_Info, arg_count) == 12, "fb_Message_Info.arg_count");
+
+struct fb_Wayland_Event {
+    _Bool something;
+    fb_Message_Info message;
+    void * data;
+    fb_u32 object_id;
+};
+_Static_assert(sizeof(fb_Wayland_Event) == 40, "fb_Wayland_Event");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Event, something) == 0, "fb_Wayland_Event.something");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Event, message) == 8, "fb_Wayland_Event.message");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Event, data) == 24, "fb_Wayland_Event.data");
+_Static_assert(FB_OFFSETOF(fb_Wayland_Event, object_id) == 32, "fb_Wayland_Event.object_id");
+
 typedef fb_s64 fb_Mouse_Button;
 #define FB_MOUSE_BUTTON_LEFT 0
 #define FB_MOUSE_BUTTON_RIGHT 1
@@ -3474,138 +3474,85 @@ typedef fb_s64 fb_Mouse_Button;
 typedef fb_Wayland_EGL_Window fb_Window;
 typedef fb_Wayland_EGL_Backend fb_Backend;
 
-fb_String fb_get_text_input(void);
-void fb_copy_to_clipboard(const char * text);
-fb_String fb_get_clipboard_text(void);
-_Bool fb_is_mouse_inside(void);
-double fb_get_last_frame_time(void);
-float fb_get_delta_time(void);
-typedef float (*fb_Proc_float_float)(float);
-float fb_use_transition_f(float value, float duration, fb_Proc_float_float easing);
-void fb_text(const char * content, const char * key);
-void * fb_node_realloc(void * memory, fb_s64 size, fb_s64 old_size);
-void * fb_node_alloc(fb_s64 size);
-void * fb_frame_realloc(void * memory, fb_s64 size, fb_s64 old_size);
-void * fb_frame_alloc(fb_s64 size);
-void * fb_state(fb_s64 size, void * initial);
-void fb_prepare_for_next_frame(void);
-void fb_layout(void);
-_Bool fb_on_key_up(fb_Key key);
-_Bool fb_on_key_down(fb_Key key, _Bool on_repeat);
-_Bool fb_on_click(fb_Mouse_Button button, _Bool check_inside, _Bool movement_threshold);
-_Bool fb_on_mouse_up(fb_Mouse_Button button, _Bool check_inside);
-_Bool fb_on_mouse_down(fb_Mouse_Button button, _Bool check_inside);
-_Bool fb_is_mouse_held(fb_Mouse_Button button);
-_Bool fb_is_dragging(fb_Mouse_Button button);
-fb_Vector2 fb_get_press_position(fb_Mouse_Button button);
-fb_Vector2 fb_get_scroll_delta(void);
-fb_Vector2 fb_get_mouse_position(void);
-void fb_set_cursor(fb_Cursor cursor);
-fb_Preferred_Theme fb_get_preferred_theme(void);
-fb_Vector2 fb_get_viewport_size(void);
-fb_Node * fb_get_node(fb_s64 node_index);
-_Bool fb_get_measurement(fb_s64 node_index, _Bool include_scopes, fb_Node_Measurement * out);
+fb_Sides fb_all_sides(float value);
+fb_Vector2 fb_angle(float degrees);
+fb_Sides fb_block_sides(float value);
+fb_Sides fb_bottom_sides(float value);
+_Bool fb_can_draw(fb_Wayland_EGL_Window window);
+void fb_close_element(fb_Node_Opening_Data data);
+void fb_close_scope(fb_Node_Opening_Data data);
+fb_Background fb_color(fb_Vector4 value);
 void fb_complete_with(fb_Style style, fb_Base_Style base, fb_Complete_Style * out);
-fb_Style fb_overwrite(fb_Style overwritten, fb_Style overwriter);
-fb_Placement fb_relative(fb_Vector2 value, fb_Corner corner);
+void fb_copy_to_clipboard(const char * text);
+fb_Font fb_create_font(fb_String memory);
+void fb_draw(fb_Vector4 clearing_color);
+fb_Sizing fb_fit(void);
+fb_Sizing fb_fixed(float value);
 fb_Placement fb_fixed_placement(fb_Vector2 value, fb_Corner corner);
 fb_Placement fb_flow(void);
-fb_Vector4 fb_rgba(float r, float g, float b, float a);
-fb_Vector4 fb_rgb(float r, float g, float b);
-fb_Background fb_gradient(fb_Linear_Gradient value);
-fb_Background fb_color(fb_Vector4 value);
-fb_Vector2 fb_to_bottom_right(void);
-fb_Vector2 fb_to_bottom_left(void);
-fb_Vector2 fb_to_top_right(void);
-fb_Vector2 fb_to_top_left(void);
-fb_Vector2 fb_to_right(void);
-fb_Vector2 fb_to_left(void);
-fb_Vector2 fb_to_bottom(void);
-fb_Vector2 fb_to_top(void);
-fb_Vector2 fb_angle(float degrees);
+void * fb_frame_alloc(fb_s64 size);
+void * fb_frame_realloc(void * memory, fb_s64 size, fb_s64 old_size);
 fb_Base_Style fb_from(fb_Complete_Style style);
-void fb_use_scrolling(fb_Scrolling_State * state);
-void fb_schedule_scroll(fb_Scrolling_State * state, fb_Vector2 position, _Bool animate);
-fb_Vector4 fb_use_transition_v4(fb_Vector4 value, float duration, fb_Proc_float_float easing);
-fb_Vector3 fb_use_transition_v3(fb_Vector3 value, float duration, fb_Proc_float_float easing);
-fb_Vector2 fb_use_transition_v2(fb_Vector2 value, float duration, fb_Proc_float_float easing);
+fb_String fb_get_clipboard_text(void);
+float fb_get_delta_time(void);
+double fb_get_last_frame_time(void);
+_Bool fb_get_measurement(fb_s64 node_index, _Bool include_scopes, fb_Node_Measurement * out);
+fb_Vector2 fb_get_mouse_position(void);
+fb_Node * fb_get_node(fb_s64 node_index);
+fb_Preferred_Theme fb_get_preferred_theme(void);
+fb_Vector2 fb_get_press_position(fb_Mouse_Button button);
+fb_Vector2 fb_get_scroll_delta(void);
+fb_String fb_get_text_input(void);
+fb_Vector2 fb_get_viewport_size(void);
+fb_Background fb_gradient(fb_Linear_Gradient value);
+fb_Sizing fb_grow(float value);
+fb_Sides fb_in_line_sides(float value);
+void fb_init_backend(fb_Wayland_EGL_Backend * backend);
+void fb_init_font(fb_Font * font);
+void fb_init_forbear(fb_Forbear * forbear, fb_Wayland_EGL_Backend * program_backend, fb_Wayland_EGL_Window * program_window, fb_Base_Style program_base_style);
+void fb_init_window(fb_Wayland_EGL_Backend * backend, fb_Wayland_EGL_Window * window, double width, double height, const char * title, double min_width, double min_height, double max_width, double max_height);
+_Bool fb_is_dragging(fb_Mouse_Button button);
+_Bool fb_is_key_held(fb_Key key);
+_Bool fb_is_mouse_held(fb_Mouse_Button button);
+_Bool fb_is_mouse_inside(void);
+void fb_layout(void);
+fb_Sides fb_left_sides(float value);
 fb_Line_Height fb_line_height_fixed(float value);
 fb_Line_Height fb_line_height_percentage(float value);
-fb_Sides fb_with_bottom_sides(fb_Sides sides, float value);
-fb_Sides fb_bottom_sides(float value);
-fb_Sides fb_with_top_sides(fb_Sides sides, float value);
-fb_Sides fb_top_sides(float value);
-fb_Sides fb_with_right_sides(fb_Sides sides, float value);
-fb_Sides fb_right_sides(float value);
-fb_Sides fb_with_left_sides(fb_Sides sides, float value);
-fb_Sides fb_left_sides(float value);
-fb_Sides fb_with_block_sides(fb_Sides sides, float value);
-fb_Sides fb_block_sides(float value);
-fb_Sides fb_with_in_line_sides(fb_Sides sides, float value);
-fb_Sides fb_in_line_sides(float value);
-fb_Sides fb_all_sides(float value);
-fb_Sizing fb_grow(float value);
-fb_Sizing fb_fixed(float value);
-fb_Sizing fb_fit(void);
-fb_Direction fb_opposite(fb_Direction direction);
-void fb_stext(fb_Style style, const char * content, const char * key);
-void fb_close_scope(fb_Node_Opening_Data data);
-fb_Node_Opening_Data fb_open_scope(const char * key);
-void fb_close_element(fb_Node_Opening_Data data);
-fb_Node_Opening_Data fb_open_element(fb_Style style, const char * key);
-void fb_draw(fb_Vector4 clearing_color);
-void fb_init_font(fb_Font * font);
-fb_Font fb_create_font(fb_String memory);
-void fb_update_window(fb_Wayland_EGL_Backend * backend, fb_Wayland_EGL_Window * window, fb_Wayland_Event event);
-void fb_update_backend(fb_Wayland_EGL_Backend * backend, fb_Wayland_Event event);
-_Bool fb_can_draw(fb_Wayland_EGL_Window window);
 fb_Wayland_Event fb_next_event(fb_Wayland_Connection * connection, _Bool wait);
-void fb_init_window(fb_Wayland_EGL_Backend * backend, fb_Wayland_EGL_Window * window, double width, double height, const char * title, double min_width, double min_height, double max_width, double max_height);
-void fb_init_backend(fb_Wayland_EGL_Backend * backend);
-void fb_init_forbear(fb_Forbear * forbear, fb_Wayland_EGL_Backend * program_backend, fb_Wayland_EGL_Window * program_window, fb_Base_Style program_base_style);
-_Bool fb_is_key_held(fb_Key key);
-typedef struct fb_Spring_Config_Vector4 fb_Spring_Config_Vector4;
-struct fb_Spring_Config_Vector4 {
-    float stiffness;
-    float damping;
-    float mass;
-    fb_Vector4 * current;
-};
-_Static_assert(sizeof(fb_Spring_Config_Vector4) == 24, "fb_Spring_Config_Vector4");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, stiffness) == 0, "fb_Spring_Config_Vector4.stiffness");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, damping) == 4, "fb_Spring_Config_Vector4.damping");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, mass) == 8, "fb_Spring_Config_Vector4.mass");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, current) == 16, "fb_Spring_Config_Vector4.current");
-
-fb_Vector4 fb_use_spring_transition_v4(fb_Vector4 target, fb_Spring_Config_Vector4 config);
-typedef struct fb_Spring_Config_Vector3 fb_Spring_Config_Vector3;
-struct fb_Spring_Config_Vector3 {
-    float stiffness;
-    float damping;
-    float mass;
-    fb_Vector3 * current;
-};
-_Static_assert(sizeof(fb_Spring_Config_Vector3) == 24, "fb_Spring_Config_Vector3");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, stiffness) == 0, "fb_Spring_Config_Vector3.stiffness");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, damping) == 4, "fb_Spring_Config_Vector3.damping");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, mass) == 8, "fb_Spring_Config_Vector3.mass");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, current) == 16, "fb_Spring_Config_Vector3.current");
-
-fb_Vector3 fb_use_spring_transition_v3(fb_Vector3 target, fb_Spring_Config_Vector3 config);
-typedef struct fb_Spring_Config_Vector2 fb_Spring_Config_Vector2;
-struct fb_Spring_Config_Vector2 {
-    float stiffness;
-    float damping;
-    float mass;
-    fb_Vector2 * current;
-};
-_Static_assert(sizeof(fb_Spring_Config_Vector2) == 24, "fb_Spring_Config_Vector2");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, stiffness) == 0, "fb_Spring_Config_Vector2.stiffness");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, damping) == 4, "fb_Spring_Config_Vector2.damping");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, mass) == 8, "fb_Spring_Config_Vector2.mass");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, current) == 16, "fb_Spring_Config_Vector2.current");
-
-fb_Vector2 fb_use_spring_transition_v2(fb_Vector2 target, fb_Spring_Config_Vector2 config);
+void * fb_node_alloc(fb_s64 size);
+void * fb_node_realloc(void * memory, fb_s64 size, fb_s64 old_size);
+_Bool fb_on_click(fb_Mouse_Button button, _Bool check_inside, _Bool movement_threshold);
+_Bool fb_on_key_down(fb_Key key, _Bool on_repeat);
+_Bool fb_on_key_up(fb_Key key);
+_Bool fb_on_mouse_down(fb_Mouse_Button button, _Bool check_inside);
+_Bool fb_on_mouse_up(fb_Mouse_Button button, _Bool check_inside);
+fb_Node_Opening_Data fb_open_element(fb_Style style, const char * key);
+fb_Node_Opening_Data fb_open_scope(const char * key);
+fb_Direction fb_opposite(fb_Direction direction);
+fb_Style fb_overwrite(fb_Style overwritten, fb_Style overwriter);
+void fb_prepare_for_next_frame(void);
+fb_Placement fb_relative(fb_Vector2 value, fb_Corner corner);
+fb_Vector4 fb_rgb(float r, float g, float b);
+fb_Vector4 fb_rgba(float r, float g, float b, float a);
+fb_Sides fb_right_sides(float value);
+void fb_schedule_scroll(fb_Scrolling_State * state, fb_Vector2 position, _Bool animate);
+void fb_set_cursor(fb_Cursor cursor);
+void * fb_state(fb_s64 size, void * initial);
+void fb_stext(fb_Style style, const char * content, const char * key);
+void fb_text(const char * content, const char * key);
+fb_Vector2 fb_to_bottom(void);
+fb_Vector2 fb_to_bottom_left(void);
+fb_Vector2 fb_to_bottom_right(void);
+fb_Vector2 fb_to_left(void);
+fb_Vector2 fb_to_right(void);
+fb_Vector2 fb_to_top(void);
+fb_Vector2 fb_to_top_left(void);
+fb_Vector2 fb_to_top_right(void);
+fb_Sides fb_top_sides(float value);
+void fb_update_backend(fb_Wayland_EGL_Backend * backend, fb_Wayland_Event event);
+void fb_update_window(fb_Wayland_EGL_Backend * backend, fb_Wayland_EGL_Window * window, fb_Wayland_Event event);
+void fb_use_scrolling(fb_Scrolling_State * state);
 typedef struct fb_Spring_Config_float fb_Spring_Config_float;
 struct fb_Spring_Config_float {
     float stiffness;
@@ -3620,6 +3567,59 @@ _Static_assert(FB_OFFSETOF(fb_Spring_Config_float, mass) == 8, "fb_Spring_Config
 _Static_assert(FB_OFFSETOF(fb_Spring_Config_float, current) == 16, "fb_Spring_Config_float.current");
 
 float fb_use_spring_transition_f(float target, fb_Spring_Config_float config);
+typedef struct fb_Spring_Config_Vector2 fb_Spring_Config_Vector2;
+struct fb_Spring_Config_Vector2 {
+    float stiffness;
+    float damping;
+    float mass;
+    fb_Vector2 * current;
+};
+_Static_assert(sizeof(fb_Spring_Config_Vector2) == 24, "fb_Spring_Config_Vector2");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, stiffness) == 0, "fb_Spring_Config_Vector2.stiffness");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, damping) == 4, "fb_Spring_Config_Vector2.damping");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, mass) == 8, "fb_Spring_Config_Vector2.mass");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, current) == 16, "fb_Spring_Config_Vector2.current");
+
+fb_Vector2 fb_use_spring_transition_v2(fb_Vector2 target, fb_Spring_Config_Vector2 config);
+typedef struct fb_Spring_Config_Vector3 fb_Spring_Config_Vector3;
+struct fb_Spring_Config_Vector3 {
+    float stiffness;
+    float damping;
+    float mass;
+    fb_Vector3 * current;
+};
+_Static_assert(sizeof(fb_Spring_Config_Vector3) == 24, "fb_Spring_Config_Vector3");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, stiffness) == 0, "fb_Spring_Config_Vector3.stiffness");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, damping) == 4, "fb_Spring_Config_Vector3.damping");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, mass) == 8, "fb_Spring_Config_Vector3.mass");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, current) == 16, "fb_Spring_Config_Vector3.current");
+
+fb_Vector3 fb_use_spring_transition_v3(fb_Vector3 target, fb_Spring_Config_Vector3 config);
+typedef struct fb_Spring_Config_Vector4 fb_Spring_Config_Vector4;
+struct fb_Spring_Config_Vector4 {
+    float stiffness;
+    float damping;
+    float mass;
+    fb_Vector4 * current;
+};
+_Static_assert(sizeof(fb_Spring_Config_Vector4) == 24, "fb_Spring_Config_Vector4");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, stiffness) == 0, "fb_Spring_Config_Vector4.stiffness");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, damping) == 4, "fb_Spring_Config_Vector4.damping");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, mass) == 8, "fb_Spring_Config_Vector4.mass");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, current) == 16, "fb_Spring_Config_Vector4.current");
+
+fb_Vector4 fb_use_spring_transition_v4(fb_Vector4 target, fb_Spring_Config_Vector4 config);
+typedef float (*fb_Proc_float_float)(float);
+float fb_use_transition_f(float value, float duration, fb_Proc_float_float easing);
+fb_Vector2 fb_use_transition_v2(fb_Vector2 value, float duration, fb_Proc_float_float easing);
+fb_Vector3 fb_use_transition_v3(fb_Vector3 value, float duration, fb_Proc_float_float easing);
+fb_Vector4 fb_use_transition_v4(fb_Vector4 value, float duration, fb_Proc_float_float easing);
+fb_Sides fb_with_block_sides(fb_Sides sides, float value);
+fb_Sides fb_with_bottom_sides(fb_Sides sides, float value);
+fb_Sides fb_with_in_line_sides(fb_Sides sides, float value);
+fb_Sides fb_with_left_sides(fb_Sides sides, float value);
+fb_Sides fb_with_right_sides(fb_Sides sides, float value);
+fb_Sides fb_with_top_sides(fb_Sides sides, float value);
 #endif
 
 #if defined(__APPLE__)

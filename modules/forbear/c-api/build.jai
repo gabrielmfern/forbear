@@ -1,6 +1,7 @@
 #import "Basic";
 #import "Compiler";
 #import "File";
+#import "Sort";
 #import "String";
 
 ROOTS  :: string.["Forbear", "Style", "Complete_Style", "Base_Style", "Font", "Node_Opening_Data",
@@ -82,6 +83,9 @@ build :: () {
             case .PHASE;
                 phase := cast(*Message_Phase) message;
                 if !target.javascript && phase.phase == .TYPECHECKED_ALL_WE_CAN && phase.num_items_waiting_to_typecheck == 0 {
+                    quick_sort(target.roots,   (a, b) => compare_strings(a.name, b.name));
+                    quick_sort(target.enums,   (a, b) => compare_strings(a.name, b.name));
+                    quick_sort(target.exports, (a, b) => compare_strings(a.name, b.name));
                     header: Header;
                     print_to_builder(*header.builder, "#if defined(%)\n", target.macro);
                     append(*header.builder, "typedef struct { fb_s64 count; fb_u8 *data; } fb_String;\n");
