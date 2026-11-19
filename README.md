@@ -4,12 +4,15 @@ forbear is a high performance, immediate mode GUI library that looks like the we
 
 Major features:
 - React-like declarative elements, components, and hooks;
-- immediate mode event handling through if-statements;
-- C API through a dynamic library;
-- incomplete JSX bindings;
-- easily embeddable and customizable;
 - HTML-like element styling and flex box-like layout;
-- Cross-platform: Windows, Linux (Wayland) and macOS.
+- immediate mode event handling through if-statements;
+- animations through transition and spring hooks;
+- state stored in a static buffer, with no heap allocations;
+- text shaping with variable fonts and per-language rules;
+- cross-platform: Windows, Linux (Wayland) and macOS;
+- C API through a dynamic library;
+- easily embeddable and customizable;
+- experimental JSX bindings.
 
 <a href="https://github.com/gabrielmfern/Calculator"><img alt="Calculator, built with forbear: typing 12.5*(78-9) shows 862.5 as you type" src="www/assets/2026-11-18-calculator.gif" width="281"></a>
 
