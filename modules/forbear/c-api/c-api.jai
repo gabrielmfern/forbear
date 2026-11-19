@@ -1,4 +1,4 @@
-#import,file "../forbear.jai"(C_ABI = true, JAVASCRIPT_ADAPTER = JAVASCRIPT);
+#import,file "../module.jai"(C_ABI = true, JAVASCRIPT_ADAPTER = JAVASCRIPT);
 #import "Basic";
 #import "Hash";
 #import "Flat_Pool";

@@ -93,7 +93,7 @@ Counter :: () {
     text(Style.{font_size = 32}, "Count: %", counter.*);
 } @component
   // The `@component` is handled by a compiler plugin that's defined in the
-  // `forbear.jai` as well. It goes through all calls of functions with this
+  // `modules/forbear/module.jai` as well. It goes through all calls of functions with this
   // annotation and wraps them in a `scope(#code ...)` which makes these handle
   // state properly.
 
