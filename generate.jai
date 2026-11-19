@@ -7,7 +7,7 @@
 #import "Basic";
 #import "String";
 #import "Process";
-#if OS == .LINUX #import "POSIX";
+#if OS == .LINUX || OS == .MACOS #import "POSIX";
 
 #run generate();
 slice :: inline (s: string, index: s64) -> string {
@@ -27,6 +27,7 @@ generate :: () {
         platform :: "linux";
     } else #if OS == .MACOS {
         platform :: "darwin";
+        setenv("MACOSX_DEPLOYMENT_TARGET", "11.0", 1);
     }
     arch :: #ifx CPU == .ARM64 then "arm64" else "x64";
 
