@@ -1600,119 +1600,77 @@ void * fb_frame_alloc(fb_s64 size);
 void * fb_state(fb_s64 size, void * initial);
 void fb_prepare_for_next_frame(void);
 void fb_layout(void);
-void fb_init_forbear(fb_Forbear * forbear, fb_Windows_GL_Backend * program_backend, fb_Windows_GL_Window * program_window, fb_Base_Style program_base_style);
-void fb_init_backend(fb_Windows_GL_Backend * backend);
-void fb_init_window(fb_Windows_GL_Backend * backend, fb_Windows_GL_Window * window, double width, double height, const char * title, double min_width, double min_height, double max_width, double max_height);
-void fb_update_backend(fb_Windows_GL_Backend * backend);
-fb_Font fb_create_font(fb_String memory);
-void fb_init_font(fb_Font * font);
-void fb_draw(fb_Vector4 clearing_color);
-fb_Node_Opening_Data fb_open_element(fb_Style style, const char * key);
-void fb_close_element(fb_Node_Opening_Data data);
-fb_Node_Opening_Data fb_open_scope(const char * key);
-void fb_close_scope(fb_Node_Opening_Data data);
-void fb_stext(fb_Style style, const char * content, const char * key);
-fb_Direction fb_opposite(fb_Direction direction);
-fb_Sizing fb_fit(void);
-fb_Sizing fb_fixed(float value);
-fb_Sizing fb_grow(float value);
-fb_Sides fb_all_sides(float value);
-fb_Sides fb_in_line_sides(float value);
-fb_Sides fb_with_in_line_sides(fb_Sides sides, float value);
-fb_Sides fb_block_sides(float value);
-fb_Sides fb_with_block_sides(fb_Sides sides, float value);
-fb_Sides fb_left_sides(float value);
-fb_Sides fb_with_left_sides(fb_Sides sides, float value);
-fb_Sides fb_right_sides(float value);
-fb_Sides fb_with_right_sides(fb_Sides sides, float value);
-fb_Sides fb_top_sides(float value);
-fb_Sides fb_with_top_sides(fb_Sides sides, float value);
-fb_Sides fb_bottom_sides(float value);
-fb_Sides fb_with_bottom_sides(fb_Sides sides, float value);
-fb_Line_Height fb_line_height_percentage(float value);
-fb_Line_Height fb_line_height_fixed(float value);
-fb_Vector2 fb_use_transition_v2(fb_Vector2 value, float duration, fb_Proc_float_float easing);
-fb_Vector3 fb_use_transition_v3(fb_Vector3 value, float duration, fb_Proc_float_float easing);
-fb_Vector4 fb_use_transition_v4(fb_Vector4 value, float duration, fb_Proc_float_float easing);
-void fb_schedule_scroll(fb_Scrolling_State * state, fb_Vector2 position, _Bool animate);
-void fb_use_scrolling(fb_Scrolling_State * state);
-fb_Base_Style fb_from(fb_Complete_Style style);
-fb_Vector2 fb_angle(float degrees);
-fb_Vector2 fb_to_top(void);
-fb_Vector2 fb_to_bottom(void);
-fb_Vector2 fb_to_left(void);
-fb_Vector2 fb_to_right(void);
-fb_Vector2 fb_to_top_left(void);
-fb_Vector2 fb_to_top_right(void);
-fb_Vector2 fb_to_bottom_left(void);
-fb_Vector2 fb_to_bottom_right(void);
-fb_Background fb_color(fb_Vector4 value);
-fb_Background fb_gradient(fb_Linear_Gradient value);
-fb_Vector4 fb_rgb(float r, float g, float b);
-fb_Vector4 fb_rgba(float r, float g, float b, float a);
-fb_Placement fb_flow(void);
-fb_Placement fb_fixed_placement(fb_Vector2 value, fb_Corner corner);
-fb_Placement fb_relative(fb_Vector2 value, fb_Corner corner);
-fb_Style fb_overwrite(fb_Style overwritten, fb_Style overwriter);
-void fb_complete_with(fb_Style style, fb_Base_Style base, fb_Complete_Style * out);
-_Bool fb_get_measurement(fb_s64 node_index, _Bool include_scopes, fb_Node_Measurement * out);
-fb_Node * fb_get_node(fb_s64 node_index);
-fb_Vector2 fb_get_viewport_size(void);
-fb_Preferred_Theme fb_get_preferred_theme(void);
-void fb_set_cursor(fb_Cursor cursor);
-fb_Vector2 fb_get_mouse_position(void);
-fb_Vector2 fb_get_scroll_delta(void);
-fb_Vector2 fb_get_press_position(fb_Mouse_Button button);
-_Bool fb_is_dragging(fb_Mouse_Button button);
-_Bool fb_is_mouse_held(fb_Mouse_Button button);
-_Bool fb_on_mouse_down(fb_Mouse_Button button, _Bool check_inside);
-_Bool fb_on_mouse_up(fb_Mouse_Button button, _Bool check_inside);
-_Bool fb_on_click(fb_Mouse_Button button, _Bool check_inside, _Bool movement_threshold);
-_Bool fb_on_key_down(fb_Key key, _Bool on_repeat);
 _Bool fb_on_key_up(fb_Key key);
+_Bool fb_on_key_down(fb_Key key, _Bool on_repeat);
+_Bool fb_on_click(fb_Mouse_Button button, _Bool check_inside, _Bool movement_threshold);
+_Bool fb_on_mouse_up(fb_Mouse_Button button, _Bool check_inside);
+_Bool fb_on_mouse_down(fb_Mouse_Button button, _Bool check_inside);
+_Bool fb_is_mouse_held(fb_Mouse_Button button);
+_Bool fb_is_dragging(fb_Mouse_Button button);
+fb_Vector2 fb_get_press_position(fb_Mouse_Button button);
+fb_Vector2 fb_get_scroll_delta(void);
+fb_Vector2 fb_get_mouse_position(void);
+void fb_set_cursor(fb_Cursor cursor);
+fb_Preferred_Theme fb_get_preferred_theme(void);
+fb_Vector2 fb_get_viewport_size(void);
+fb_Node * fb_get_node(fb_s64 node_index);
+_Bool fb_get_measurement(fb_s64 node_index, _Bool include_scopes, fb_Node_Measurement * out);
+void fb_complete_with(fb_Style style, fb_Base_Style base, fb_Complete_Style * out);
+fb_Style fb_overwrite(fb_Style overwritten, fb_Style overwriter);
+fb_Placement fb_relative(fb_Vector2 value, fb_Corner corner);
+fb_Placement fb_fixed_placement(fb_Vector2 value, fb_Corner corner);
+fb_Placement fb_flow(void);
+fb_Vector4 fb_rgba(float r, float g, float b, float a);
+fb_Vector4 fb_rgb(float r, float g, float b);
+fb_Background fb_gradient(fb_Linear_Gradient value);
+fb_Background fb_color(fb_Vector4 value);
+fb_Vector2 fb_to_bottom_right(void);
+fb_Vector2 fb_to_bottom_left(void);
+fb_Vector2 fb_to_top_right(void);
+fb_Vector2 fb_to_top_left(void);
+fb_Vector2 fb_to_right(void);
+fb_Vector2 fb_to_left(void);
+fb_Vector2 fb_to_bottom(void);
+fb_Vector2 fb_to_top(void);
+fb_Vector2 fb_angle(float degrees);
+fb_Base_Style fb_from(fb_Complete_Style style);
+void fb_use_scrolling(fb_Scrolling_State * state);
+void fb_schedule_scroll(fb_Scrolling_State * state, fb_Vector2 position, _Bool animate);
+fb_Vector4 fb_use_transition_v4(fb_Vector4 value, float duration, fb_Proc_float_float easing);
+fb_Vector3 fb_use_transition_v3(fb_Vector3 value, float duration, fb_Proc_float_float easing);
+fb_Vector2 fb_use_transition_v2(fb_Vector2 value, float duration, fb_Proc_float_float easing);
+fb_Line_Height fb_line_height_fixed(float value);
+fb_Line_Height fb_line_height_percentage(float value);
+fb_Sides fb_with_bottom_sides(fb_Sides sides, float value);
+fb_Sides fb_bottom_sides(float value);
+fb_Sides fb_with_top_sides(fb_Sides sides, float value);
+fb_Sides fb_top_sides(float value);
+fb_Sides fb_with_right_sides(fb_Sides sides, float value);
+fb_Sides fb_right_sides(float value);
+fb_Sides fb_with_left_sides(fb_Sides sides, float value);
+fb_Sides fb_left_sides(float value);
+fb_Sides fb_with_block_sides(fb_Sides sides, float value);
+fb_Sides fb_block_sides(float value);
+fb_Sides fb_with_in_line_sides(fb_Sides sides, float value);
+fb_Sides fb_in_line_sides(float value);
+fb_Sides fb_all_sides(float value);
+fb_Sizing fb_grow(float value);
+fb_Sizing fb_fixed(float value);
+fb_Sizing fb_fit(void);
+fb_Direction fb_opposite(fb_Direction direction);
+void fb_stext(fb_Style style, const char * content, const char * key);
+void fb_close_scope(fb_Node_Opening_Data data);
+fb_Node_Opening_Data fb_open_scope(const char * key);
+void fb_close_element(fb_Node_Opening_Data data);
+fb_Node_Opening_Data fb_open_element(fb_Style style, const char * key);
+void fb_draw(fb_Vector4 clearing_color);
+void fb_init_font(fb_Font * font);
+fb_Font fb_create_font(fb_String memory);
+void fb_update_backend(fb_Windows_GL_Backend * backend);
+void fb_init_window(fb_Windows_GL_Backend * backend, fb_Windows_GL_Window * window, double width, double height, const char * title, double min_width, double min_height, double max_width, double max_height);
+void fb_init_backend(fb_Windows_GL_Backend * backend);
+void fb_init_forbear(fb_Forbear * forbear, fb_Windows_GL_Backend * program_backend, fb_Windows_GL_Window * program_window, fb_Base_Style program_base_style);
 _Bool fb_is_key_held(fb_Key key);
-typedef struct fb_Spring_Config_float fb_Spring_Config_float;
-struct fb_Spring_Config_float {
-    float stiffness;
-    float damping;
-    float mass;
-    float * current;
-};
-_Static_assert(sizeof(fb_Spring_Config_float) == 24, "fb_Spring_Config_float");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, stiffness) == 0, "fb_Spring_Config_float.stiffness");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, damping) == 4, "fb_Spring_Config_float.damping");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, mass) == 8, "fb_Spring_Config_float.mass");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, current) == 16, "fb_Spring_Config_float.current");
-
-float fb_use_spring_transition_f(float target, fb_Spring_Config_float config);
-typedef struct fb_Spring_Config_Vector2 fb_Spring_Config_Vector2;
-struct fb_Spring_Config_Vector2 {
-    float stiffness;
-    float damping;
-    float mass;
-    fb_Vector2 * current;
-};
-_Static_assert(sizeof(fb_Spring_Config_Vector2) == 24, "fb_Spring_Config_Vector2");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, stiffness) == 0, "fb_Spring_Config_Vector2.stiffness");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, damping) == 4, "fb_Spring_Config_Vector2.damping");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, mass) == 8, "fb_Spring_Config_Vector2.mass");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, current) == 16, "fb_Spring_Config_Vector2.current");
-
-fb_Vector2 fb_use_spring_transition_v2(fb_Vector2 target, fb_Spring_Config_Vector2 config);
-typedef struct fb_Spring_Config_Vector3 fb_Spring_Config_Vector3;
-struct fb_Spring_Config_Vector3 {
-    float stiffness;
-    float damping;
-    float mass;
-    fb_Vector3 * current;
-};
-_Static_assert(sizeof(fb_Spring_Config_Vector3) == 24, "fb_Spring_Config_Vector3");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, stiffness) == 0, "fb_Spring_Config_Vector3.stiffness");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, damping) == 4, "fb_Spring_Config_Vector3.damping");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, mass) == 8, "fb_Spring_Config_Vector3.mass");
-_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, current) == 16, "fb_Spring_Config_Vector3.current");
-
-fb_Vector3 fb_use_spring_transition_v3(fb_Vector3 target, fb_Spring_Config_Vector3 config);
 typedef struct fb_Spring_Config_Vector4 fb_Spring_Config_Vector4;
 struct fb_Spring_Config_Vector4 {
     float stiffness;
@@ -1727,6 +1685,48 @@ _Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, mass) == 8, "fb_Spring_Conf
 _Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector4, current) == 16, "fb_Spring_Config_Vector4.current");
 
 fb_Vector4 fb_use_spring_transition_v4(fb_Vector4 target, fb_Spring_Config_Vector4 config);
+typedef struct fb_Spring_Config_Vector3 fb_Spring_Config_Vector3;
+struct fb_Spring_Config_Vector3 {
+    float stiffness;
+    float damping;
+    float mass;
+    fb_Vector3 * current;
+};
+_Static_assert(sizeof(fb_Spring_Config_Vector3) == 24, "fb_Spring_Config_Vector3");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, stiffness) == 0, "fb_Spring_Config_Vector3.stiffness");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, damping) == 4, "fb_Spring_Config_Vector3.damping");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, mass) == 8, "fb_Spring_Config_Vector3.mass");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector3, current) == 16, "fb_Spring_Config_Vector3.current");
+
+fb_Vector3 fb_use_spring_transition_v3(fb_Vector3 target, fb_Spring_Config_Vector3 config);
+typedef struct fb_Spring_Config_Vector2 fb_Spring_Config_Vector2;
+struct fb_Spring_Config_Vector2 {
+    float stiffness;
+    float damping;
+    float mass;
+    fb_Vector2 * current;
+};
+_Static_assert(sizeof(fb_Spring_Config_Vector2) == 24, "fb_Spring_Config_Vector2");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, stiffness) == 0, "fb_Spring_Config_Vector2.stiffness");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, damping) == 4, "fb_Spring_Config_Vector2.damping");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, mass) == 8, "fb_Spring_Config_Vector2.mass");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_Vector2, current) == 16, "fb_Spring_Config_Vector2.current");
+
+fb_Vector2 fb_use_spring_transition_v2(fb_Vector2 target, fb_Spring_Config_Vector2 config);
+typedef struct fb_Spring_Config_float fb_Spring_Config_float;
+struct fb_Spring_Config_float {
+    float stiffness;
+    float damping;
+    float mass;
+    float * current;
+};
+_Static_assert(sizeof(fb_Spring_Config_float) == 24, "fb_Spring_Config_float");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, stiffness) == 0, "fb_Spring_Config_float.stiffness");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, damping) == 4, "fb_Spring_Config_float.damping");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, mass) == 8, "fb_Spring_Config_float.mass");
+_Static_assert(FB_OFFSETOF(fb_Spring_Config_float, current) == 16, "fb_Spring_Config_float.current");
+
+float fb_use_spring_transition_f(float target, fb_Spring_Config_float config);
 #endif
 
 #if defined(__linux__)
@@ -5321,14 +5321,20 @@ fb_Javascript_Adapter *fb_create_javascript_adapter(fb_String source, const char
 void fb_render_with_javascript_adapter(fb_Javascript_Adapter *adapter);
 
 #if defined(__clang__)
-#define FB_OVERRIDES_BEGIN _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Winitializer-overrides\"")
-#define FB_OVERRIDES_END   _Pragma("clang diagnostic pop")
+#define FB_OVERRIDES(T, ...) \
+    _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Winitializer-overrides\"") \
+    ((T){ __VA_ARGS__ }) \
+    _Pragma("clang diagnostic pop")
 #elif defined(__GNUC__)
-#define FB_OVERRIDES_BEGIN _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Woverride-init\"")
-#define FB_OVERRIDES_END   _Pragma("GCC diagnostic pop")
+#define FB_OVERRIDES(T, ...) \
+    __extension__ ({ \
+        _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Woverride-init\"") \
+        T fb_overrides = { __VA_ARGS__ }; \
+        _Pragma("GCC diagnostic pop") \
+        fb_overrides; \
+    })
 #else
-#define FB_OVERRIDES_BEGIN
-#define FB_OVERRIDES_END
+#define FB_OVERRIDES(T, ...) ((T){ __VA_ARGS__ })
 #endif
 
 #define FB_UNSET 0xFF
@@ -5337,8 +5343,7 @@ void fb_render_with_javascript_adapter(fb_Javascript_Adapter *adapter);
 #define FB_SIDES_NAN   { FB_VECTOR2_NAN, FB_VECTOR2_NAN }
 
 #define FB_STYLE(...) \
-    FB_OVERRIDES_BEGIN \
-    ((fb_Style){ \
+    FB_OVERRIDES(fb_Style, \
         .background      = { .kind = FB_UNSET }, \
         .color           = FB_VECTOR4_NAN, \
         .border_radius   = FB_FLOAT32_NAN, \
@@ -5376,8 +5381,7 @@ void fb_render_with_javascript_adapter(fb_Javascript_Adapter *adapter);
         .y_justification = FB_UNSET, \
         .direction       = FB_UNSET, \
         __VA_ARGS__ \
-    }) \
-    FB_OVERRIDES_END
+    )
 
 #define FB_STRINGIFY_(x) #x
 #define FB_STRINGIFY(x)  FB_STRINGIFY_(x)
@@ -5410,8 +5414,7 @@ void fb_render_with_javascript_adapter(fb_Javascript_Adapter *adapter);
 #define FB_TEXT(...)                      FB_TEXT_KEYED(FB_LOCATION_KEY, __VA_ARGS__)
 
 #define FB_BASE_STYLE(...) \
-    FB_OVERRIDES_BEGIN \
-    ((fb_Base_Style){ \
+    FB_OVERRIDES(fb_Base_Style, \
         .font           = 0, \
         .language       = FB_LANGUAGE_DONT_KNOW, \
         .text_direction = FB_TEXT_DIRECTION_DONT_KNOW, \
@@ -5422,8 +5425,7 @@ void fb_render_with_javascript_adapter(fb_Javascript_Adapter *adapter);
         .text_wrapping  = FB_TEXT_WRAPPING_WORD, \
         .cursor         = FB_CURSOR_DEFAULT, \
         __VA_ARGS__ \
-    }) \
-    FB_OVERRIDES_END
+    )
 
 #define FB_USE_TRANSITION(value, duration, easing) \
     _Generic((value), \
