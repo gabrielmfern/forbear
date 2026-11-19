@@ -112,13 +112,12 @@ There are two reasons for this kind of licensing:
 Beware forbear has been in heavy development since early 2025 and the API that is established in the code will most likely change.
 
 The road map for the near future is:
-- C ABI and C bindings.
-- Async API that works with the immediate mode nature of the library and the different adapters.
 - Complete Wayland and macOS windowing.
+- Async API that works with the immediate mode nature of the library and the different adapters.
 - Metal rendering on macOS.
 - Native font rendering through dynamically linked FreeType, DirectWrite and CoreText.
 
-For more details, see [TODO.txt](./TODO.txt).
+For more details, see [to-do.txt](./to-do.txt).
 
 ---
 
