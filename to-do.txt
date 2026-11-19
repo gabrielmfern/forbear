@@ -1,4 +1,3 @@
-- implement C ABI and C adapter
 - Complete windowing code
     - Handle the menu bar protocol in Wayland, and render the Gnome menu bar
     - Use proper event handlers in macOS instead of polling
