@@ -11395,6 +11395,8 @@ ptrdiff_t :: s64;
 // ====== END WINDOWS BINDINGS ======
 } else #if OS == .MACOS {
 // ====== BEGIN MACOS BINDINGS ======
+
+
 kbts_s32 :: s32;
 
 kbts_b32 :: s32;
@@ -11404,7 +11406,7 @@ KB_TEXT_SHAPE_POINTER_SIZE :: 8;
 KBTS_VARIATION_VALUE_UNSET :: -100000.0;
 
 KBTS_MAXIMUM_RECOMPOSITION_PARENTS :: 19;
-KBTS_MAXIMUM_CODEPOINT_SCRIPTS     :: 23;
+KBTS_MAXIMUM_CODEPOINT_SCRIPTS :: 23;
 
 kbts_windows_language_id :: u16;
 kbts_windows_language_id_enum :: enum u32 {
@@ -11827,7 +11829,7 @@ kbts_windows_language_id_enum :: enum u32 {
 
 kbts_language :: u32;
 kbts_language_enum :: enum u32 {
-    KBTS_LANGUAGE_DONT_KNOW :: 0;
+    KBTS_LANGUAGE_DONT_KNOW                     :: 0;
 
     KBTS_LANGUAGE_A_HMAO                        :: 541347144;
     KBTS_LANGUAGE_AARI                          :: 541676097;
@@ -12516,24 +12518,24 @@ kbts_language_enum :: enum u32 {
 
 kbts_break_flags :: u32;
 kbts_break_flags_enum :: enum u32 {
-    KBTS_BREAK_FLAG_DIRECTION :: 1;
+    KBTS_BREAK_FLAG_DIRECTION           :: 1;
 
-    KBTS_BREAK_FLAG_SCRIPT :: 2;
+    KBTS_BREAK_FLAG_SCRIPT              :: 2;
 
-    KBTS_BREAK_FLAG_GRAPHEME :: 4;
+    KBTS_BREAK_FLAG_GRAPHEME            :: 4;
 
-    KBTS_BREAK_FLAG_WORD :: 8;
+    KBTS_BREAK_FLAG_WORD                :: 8;
 
-    KBTS_BREAK_FLAG_LINE_SOFT :: 16;
+    KBTS_BREAK_FLAG_LINE_SOFT           :: 16;
 
-    KBTS_BREAK_FLAG_LINE_HARD :: 32;
+    KBTS_BREAK_FLAG_LINE_HARD           :: 32;
 
-    KBTS_BREAK_FLAG_MANUAL :: 64;
+    KBTS_BREAK_FLAG_MANUAL              :: 64;
 
     KBTS_BREAK_FLAG_PARAGRAPH_DIRECTION :: 128;
 
-    KBTS_BREAK_FLAG_LINE :: 48;
-    KBTS_BREAK_FLAG_ANY  :: 63;
+    KBTS_BREAK_FLAG_LINE                :: 48;
+    KBTS_BREAK_FLAG_ANY                 :: 63;
 }
 
 // Japanese text contains "kinsoku" characters, around which breaking a line is forbidden.
@@ -12550,15 +12552,15 @@ kbts_japanese_line_break_style_enum :: enum u32 {
 
     KBTS_JAPANESE_LINE_BREAK_STYLE_NORMAL :: 1;
 
-    KBTS_JAPANESE_LINE_BREAK_STYLE_LOOSE :: 2;
+    KBTS_JAPANESE_LINE_BREAK_STYLE_LOOSE  :: 2;
 
-    KBTS_JAPANESE_LINE_BREAK_STYLE_COUNT :: 3;
+    KBTS_JAPANESE_LINE_BREAK_STYLE_COUNT  :: 3;
 }
 
 kbts_break_state_flags :: u32;
 kbts_break_state_flags_enum :: enum u32 {
-    KBTS_BREAK_STATE_FLAG_STARTED :: 1;
-    KBTS_BREAK_STATE_FLAG_END     :: 2;
+    KBTS_BREAK_STATE_FLAG_STARTED          :: 1;
+    KBTS_BREAK_STATE_FLAG_END              :: 2;
 
     KBTS_BREAK_STATE_FLAG_SAW_R_AFTER_L    :: 8;
     KBTS_BREAK_STATE_FLAG_SAW_AL_AFTER_LR  :: 16;
@@ -12567,14 +12569,14 @@ kbts_break_state_flags_enum :: enum u32 {
 
 kbts_shape_context_flags :: u32;
 kbts_shape_context_flags_enum :: enum u32 {
-    KBTS_SHAPE_CONTEXT_FLAG_NONE :: 0;
+    KBTS_SHAPE_CONTEXT_FLAG_NONE                        :: 0;
 
     KBTS_SHAPE_CONTEXT_FLAG_FONT_PRIORITY_BOTTOM_TO_TOP :: 1;
 }
 
 kbts_text_format :: u32;
 kbts_text_format_enum :: enum u32 {
-    KBTS_TEXT_FORMAT_NONE :: 0;
+    KBTS_TEXT_FORMAT_NONE  :: 0;
 
     KBTS_TEXT_FORMAT_UTF32 :: 1;
     KBTS_TEXT_FORMAT_UTF8  :: 2;
@@ -12588,7 +12590,7 @@ kbts_direction_enum :: enum u32 {
     KBTS_DIRECTION_LTR       :: 1;
     KBTS_DIRECTION_RTL       :: 2;
 
-    KBTS_DIRECTION_COUNT :: 3;
+    KBTS_DIRECTION_COUNT     :: 3;
 }
 
 kbts_orientation :: u32;
@@ -12596,7 +12598,7 @@ kbts_orientation_enum :: enum u32 {
     KBTS_ORIENTATION_HORIZONTAL :: 0;
     KBTS_ORIENTATION_VERTICAL   :: 1;
 
-    KBTS_ORIENTATION_COUNT :: 2;
+    KBTS_ORIENTATION_COUNT      :: 2;
 }
 
 kbts_shaping_table :: u8;
@@ -12614,7 +12616,7 @@ kbts_shape_error_enum :: enum u32 {
     KBTS_SHAPE_ERROR_OUT_OF_MEMORY                  :: 3;
     KBTS_SHAPE_ERROR_GENERATED_TOO_MANY_GLYPHS      :: 4;
 
-    KBTS_SHAPE_ERROR_COUNT :: 5;
+    KBTS_SHAPE_ERROR_COUNT                          :: 5;
 }
 
 kbts_allocator_op_kind :: u32;
@@ -12623,29 +12625,29 @@ kbts_allocator_op_kind_enum :: enum u32 {
     KBTS_ALLOCATOR_OP_KIND_ALLOCATE :: 1;
     KBTS_ALLOCATOR_OP_KIND_FREE     :: 2;
 
-    KBTS_ALLOCATOR_OP_KIND_COUNT :: 3;
+    KBTS_ALLOCATOR_OP_KIND_COUNT    :: 3;
 }
 
 kbts_blob_table_id :: u32;
 kbts_blob_table_id_enum :: enum u32 {
-    KBTS_BLOB_TABLE_ID_NONE :: 0;
-    KBTS_BLOB_TABLE_ID_HEAD :: 1;
-    KBTS_BLOB_TABLE_ID_CMAP :: 2;
-    KBTS_BLOB_TABLE_ID_GDEF :: 3;
-    KBTS_BLOB_TABLE_ID_GSUB :: 4;
-    KBTS_BLOB_TABLE_ID_GPOS :: 5;
-    KBTS_BLOB_TABLE_ID_HHEA :: 6;
-    KBTS_BLOB_TABLE_ID_VHEA :: 7;
-    KBTS_BLOB_TABLE_ID_HMTX :: 8;
-    KBTS_BLOB_TABLE_ID_VMTX :: 9;
-    KBTS_BLOB_TABLE_ID_MAXP :: 10;
-    KBTS_BLOB_TABLE_ID_OS2  :: 11;
-    KBTS_BLOB_TABLE_ID_NAME :: 12;
-    KBTS_BLOB_TABLE_ID_FVAR :: 13;
-    KBTS_BLOB_TABLE_ID_AVAR :: 14;
-    KBTS_BLOB_TABLE_ID_MVAR :: 15;
-    KBTS_BLOB_TABLE_ID_HVAR :: 16;
-    KBTS_BLOB_TABLE_ID_VVAR :: 17;
+    KBTS_BLOB_TABLE_ID_NONE  :: 0;
+    KBTS_BLOB_TABLE_ID_HEAD  :: 1;
+    KBTS_BLOB_TABLE_ID_CMAP  :: 2;
+    KBTS_BLOB_TABLE_ID_GDEF  :: 3;
+    KBTS_BLOB_TABLE_ID_GSUB  :: 4;
+    KBTS_BLOB_TABLE_ID_GPOS  :: 5;
+    KBTS_BLOB_TABLE_ID_HHEA  :: 6;
+    KBTS_BLOB_TABLE_ID_VHEA  :: 7;
+    KBTS_BLOB_TABLE_ID_HMTX  :: 8;
+    KBTS_BLOB_TABLE_ID_VMTX  :: 9;
+    KBTS_BLOB_TABLE_ID_MAXP  :: 10;
+    KBTS_BLOB_TABLE_ID_OS2   :: 11;
+    KBTS_BLOB_TABLE_ID_NAME  :: 12;
+    KBTS_BLOB_TABLE_ID_FVAR  :: 13;
+    KBTS_BLOB_TABLE_ID_AVAR  :: 14;
+    KBTS_BLOB_TABLE_ID_MVAR  :: 15;
+    KBTS_BLOB_TABLE_ID_HVAR  :: 16;
+    KBTS_BLOB_TABLE_ID_VVAR  :: 17;
 
     KBTS_BLOB_TABLE_ID_COUNT :: 18;
 }
@@ -12659,14 +12661,14 @@ kbts_load_font_error_enum :: enum u32 {
     KBTS_LOAD_FONT_ERROR_COULD_NOT_OPEN_FILE :: 4;
     KBTS_LOAD_FONT_ERROR_READ_ERROR          :: 5;
 
-    KBTS_LOAD_FONT_ERROR_COUNT :: 6;
+    KBTS_LOAD_FONT_ERROR_COUNT               :: 6;
 }
 
 kbts_version :: u32;
 kbts_version_enum :: enum u32 {
-    KBTS_VERSION_1_X  :: 0;
-    KBTS_VERSION_2_0  :: 1;
-    KBTS_VERSION_2_28 :: 2;
+    KBTS_VERSION_1_X     :: 0;
+    KBTS_VERSION_2_0     :: 1;
+    KBTS_VERSION_2_28    :: 2;
 
     KBTS_VERSION_CURRENT :: 2;
 }
@@ -12677,12 +12679,12 @@ kbts_blob_version_enum :: enum u32 {
     KBTS_BLOB_VERSION_INITIAL                               :: 1;
     KBTS_BLOB_VERSION_REMOVED_SUBTABLE_INFOS_ALIGNED_TABLES :: 2;
 
-    KBTS_BLOB_VERSION_CURRENT :: 2;
+    KBTS_BLOB_VERSION_CURRENT                               :: 2;
 }
 
 kbts_font_style_flags :: u32;
 kbts_font_style_flags_enum :: enum u32 {
-    KBTS_FONT_STYLE_FLAG_NONE :: 0;
+    KBTS_FONT_STYLE_FLAG_NONE    :: 0;
 
     KBTS_FONT_STYLE_FLAG_REGULAR :: 1;
     KBTS_FONT_STYLE_FLAG_ITALIC  :: 2;
@@ -12691,7 +12693,7 @@ kbts_font_style_flags_enum :: enum u32 {
 
 kbts_font_weight :: u32;
 kbts_font_weight_enum :: enum u32 {
-    KBTS_FONT_WEIGHT_UNKNOWN :: 0;
+    KBTS_FONT_WEIGHT_UNKNOWN     :: 0;
 
     KBTS_FONT_WEIGHT_THIN        :: 1;
     KBTS_FONT_WEIGHT_EXTRA_LIGHT :: 2;
@@ -12703,12 +12705,12 @@ kbts_font_weight_enum :: enum u32 {
     KBTS_FONT_WEIGHT_EXTRA_BOLD  :: 8;
     KBTS_FONT_WEIGHT_BLACK       :: 9;
 
-    KBTS_FONT_WEIGHT_COUNT :: 10;
+    KBTS_FONT_WEIGHT_COUNT       :: 10;
 }
 
 kbts_font_width :: u32;
 kbts_font_width_enum :: enum u32 {
-    KBTS_FONT_WIDTH_UNKNOWN :: 0;
+    KBTS_FONT_WIDTH_UNKNOWN         :: 0;
 
     KBTS_FONT_WIDTH_ULTRA_CONDENSED :: 1;
     KBTS_FONT_WIDTH_EXTRA_CONDENSED :: 2;
@@ -12720,32 +12722,32 @@ kbts_font_width_enum :: enum u32 {
     KBTS_FONT_WIDTH_EXTRA_EXPANDED  :: 8;
     KBTS_FONT_WIDTH_ULTRA_EXPANDED  :: 9;
 
-    KBTS_FONT_WIDTH_COUNT :: 10;
+    KBTS_FONT_WIDTH_COUNT           :: 10;
 }
 
 kbts_glyph_flags :: u32;
 kbts_glyph_flags_enum :: enum u32 {
-    KBTS_GLYPH_FLAG_ISOL :: 1;
-    KBTS_GLYPH_FLAG_FINA :: 2;
-    KBTS_GLYPH_FLAG_FIN2 :: 4;
-    KBTS_GLYPH_FLAG_FIN3 :: 8;
-    KBTS_GLYPH_FLAG_MEDI :: 16;
-    KBTS_GLYPH_FLAG_MED2 :: 32;
-    KBTS_GLYPH_FLAG_INIT :: 64;
+    KBTS_GLYPH_FLAG_ISOL                           :: 1;
+    KBTS_GLYPH_FLAG_FINA                           :: 2;
+    KBTS_GLYPH_FLAG_FIN2                           :: 4;
+    KBTS_GLYPH_FLAG_FIN3                           :: 8;
+    KBTS_GLYPH_FLAG_MEDI                           :: 16;
+    KBTS_GLYPH_FLAG_MED2                           :: 32;
+    KBTS_GLYPH_FLAG_INIT                           :: 64;
 
-    KBTS_GLYPH_FLAG_LJMO :: 128;
-    KBTS_GLYPH_FLAG_VJMO :: 256;
-    KBTS_GLYPH_FLAG_TJMO :: 512;
-    KBTS_GLYPH_FLAG_RPHF :: 1024;
-    KBTS_GLYPH_FLAG_BLWF :: 2048;
-    KBTS_GLYPH_FLAG_HALF :: 4096;
-    KBTS_GLYPH_FLAG_PSTF :: 8192;
-    KBTS_GLYPH_FLAG_ABVF :: 16384;
-    KBTS_GLYPH_FLAG_PREF :: 32768;
-    KBTS_GLYPH_FLAG_NUMR :: 65536;
-    KBTS_GLYPH_FLAG_FRAC :: 131072;
-    KBTS_GLYPH_FLAG_DNOM :: 262144;
-    KBTS_GLYPH_FLAG_CFAR :: 524288;
+    KBTS_GLYPH_FLAG_LJMO                           :: 128;
+    KBTS_GLYPH_FLAG_VJMO                           :: 256;
+    KBTS_GLYPH_FLAG_TJMO                           :: 512;
+    KBTS_GLYPH_FLAG_RPHF                           :: 1024;
+    KBTS_GLYPH_FLAG_BLWF                           :: 2048;
+    KBTS_GLYPH_FLAG_HALF                           :: 4096;
+    KBTS_GLYPH_FLAG_PSTF                           :: 8192;
+    KBTS_GLYPH_FLAG_ABVF                           :: 16384;
+    KBTS_GLYPH_FLAG_PREF                           :: 32768;
+    KBTS_GLYPH_FLAG_NUMR                           :: 65536;
+    KBTS_GLYPH_FLAG_FRAC                           :: 131072;
+    KBTS_GLYPH_FLAG_DNOM                           :: 262144;
+    KBTS_GLYPH_FLAG_CFAR                           :: 524288;
 
     KBTS_GLYPH_FLAG_DO_NOT_DECOMPOSE               :: 1048576;
     KBTS_GLYPH_FLAG_FIRST_IN_MULTIPLE_SUBSTITUTION :: 2097152;
@@ -12754,24 +12756,24 @@ kbts_glyph_flags_enum :: enum u32 {
     KBTS_GLYPH_FLAG_GENERATED_BY_GSUB              :: 16777216;
     KBTS_GLYPH_FLAG_USED_IN_GPOS                   :: 33554432;
 
-    KBTS_GLYPH_FLAG_STCH_ENDPOINT  :: 67108864;
-    KBTS_GLYPH_FLAG_STCH_EXTENSION :: 134217728;
+    KBTS_GLYPH_FLAG_STCH_ENDPOINT                  :: 67108864;
+    KBTS_GLYPH_FLAG_STCH_EXTENSION                 :: 134217728;
 
-    KBTS_GLYPH_FLAG_LIGATURE              :: 268435456;
-    KBTS_GLYPH_FLAG_MULTIPLE_SUBSTITUTION :: 536870912;
+    KBTS_GLYPH_FLAG_LIGATURE                       :: 268435456;
+    KBTS_GLYPH_FLAG_MULTIPLE_SUBSTITUTION          :: 536870912;
 }
 
 kbts_joining_feature :: u8;
 kbts_joining_feature_enum :: enum u32 {
-    KBTS_JOINING_FEATURE_NONE :: 0;
+    KBTS_JOINING_FEATURE_NONE  :: 0;
 
-    KBTS_JOINING_FEATURE_ISOL :: 1;
-    KBTS_JOINING_FEATURE_FINA :: 2;
-    KBTS_JOINING_FEATURE_FIN2 :: 3;
-    KBTS_JOINING_FEATURE_FIN3 :: 4;
-    KBTS_JOINING_FEATURE_MEDI :: 5;
-    KBTS_JOINING_FEATURE_MED2 :: 6;
-    KBTS_JOINING_FEATURE_INIT :: 7;
+    KBTS_JOINING_FEATURE_ISOL  :: 1;
+    KBTS_JOINING_FEATURE_FINA  :: 2;
+    KBTS_JOINING_FEATURE_FIN2  :: 3;
+    KBTS_JOINING_FEATURE_FIN3  :: 4;
+    KBTS_JOINING_FEATURE_MEDI  :: 5;
+    KBTS_JOINING_FEATURE_MED2  :: 6;
+    KBTS_JOINING_FEATURE_INIT  :: 7;
 
     KBTS_JOINING_FEATURE_COUNT :: 8;
 }
@@ -12781,40 +12783,40 @@ kbts_user_id_generation_mode_enum :: enum u32 {
     KBTS_USER_ID_GENERATION_MODE_CODEPOINT_INDEX :: 0;
     KBTS_USER_ID_GENERATION_MODE_SOURCE_INDEX    :: 1;
 
-    KBTS_USER_ID_GENERATION_MODE_COUNT :: 2;
+    KBTS_USER_ID_GENERATION_MODE_COUNT           :: 2;
 }
 
 kbts_break_config_flags :: u32;
 kbts_break_config_flags_enum :: enum u32 {
-    KBTS_BREAK_CONFIG_FLAG_NONE :: 0;
+    KBTS_BREAK_CONFIG_FLAG_NONE                                  :: 0;
 
     KBTS_BREAK_CONFIG_FLAG_END_OF_TEXT_GENERATES_HARD_LINE_BREAK :: 1;
 }
 
 kbts_decode_utf16_flags :: u32;
 kbts_decode_utf16_flags_enum :: enum u32 {
-    KBTS_DECODE_UTF16_FLAG_NONE :: 0;
+    KBTS_DECODE_UTF16_FLAG_NONE       :: 0;
 
     KBTS_DECODE_UTF16_FLAG_BIG_ENDIAN :: 1;
 }
 
 kbts_font_info_string_id :: u32;
 kbts_font_info_string_id_enum :: enum u32 {
-    KBTS_FONT_INFO_STRING_ID_NONE                  :: 0;
-    KBTS_FONT_INFO_STRING_ID_COPYRIGHT             :: 1;
-    KBTS_FONT_INFO_STRING_ID_FAMILY                :: 2;
-    KBTS_FONT_INFO_STRING_ID_SUBFAMILY             :: 3;
-    KBTS_FONT_INFO_STRING_ID_UID                   :: 4;
-    KBTS_FONT_INFO_STRING_ID_FULL_NAME             :: 5;
-    KBTS_FONT_INFO_STRING_ID_VERSION               :: 6;
-    KBTS_FONT_INFO_STRING_ID_POSTSCRIPT_NAME       :: 7;
-    KBTS_FONT_INFO_STRING_ID_TRADEMARK             :: 8;
-    KBTS_FONT_INFO_STRING_ID_MANUFACTURER          :: 9;
-    KBTS_FONT_INFO_STRING_ID_DESIGNER              :: 10;
-    KBTS_FONT_INFO_STRING_ID_TYPOGRAPHIC_FAMILY    :: 11;
-    KBTS_FONT_INFO_STRING_ID_TYPOGRAPHIC_SUBFAMILY :: 12;
+    KBTS_FONT_INFO_STRING_ID_NONE                              :: 0;
+    KBTS_FONT_INFO_STRING_ID_COPYRIGHT                         :: 1;
+    KBTS_FONT_INFO_STRING_ID_FAMILY                            :: 2;
+    KBTS_FONT_INFO_STRING_ID_SUBFAMILY                         :: 3;
+    KBTS_FONT_INFO_STRING_ID_UID                               :: 4;
+    KBTS_FONT_INFO_STRING_ID_FULL_NAME                         :: 5;
+    KBTS_FONT_INFO_STRING_ID_VERSION                           :: 6;
+    KBTS_FONT_INFO_STRING_ID_POSTSCRIPT_NAME                   :: 7;
+    KBTS_FONT_INFO_STRING_ID_TRADEMARK                         :: 8;
+    KBTS_FONT_INFO_STRING_ID_MANUFACTURER                      :: 9;
+    KBTS_FONT_INFO_STRING_ID_DESIGNER                          :: 10;
+    KBTS_FONT_INFO_STRING_ID_TYPOGRAPHIC_FAMILY                :: 11;
+    KBTS_FONT_INFO_STRING_ID_TYPOGRAPHIC_SUBFAMILY             :: 12;
 
-    KBTS_FONT_INFO_STRING_ID_COUNT0 :: 13;
+    KBTS_FONT_INFO_STRING_ID_COUNT0                            :: 13;
 
     KBTS_FONT_INFO_STRING_ID_DESCRIPTION                       :: 13;
     KBTS_FONT_INFO_STRING_ID_VENDOR_URL                        :: 14;
@@ -12830,7 +12832,7 @@ kbts_font_info_string_id_enum :: enum u32 {
     KBTS_FONT_INFO_STRING_ID_DARK_BACKGROUND_PALETTE           :: 24;
     KBTS_FONT_INFO_STRING_ID_VARIATIONS_POSTSCRIPT_NAME_PREFIX :: 25;
 
-    KBTS_FONT_INFO_STRING_ID_COUNT1 :: 26;
+    KBTS_FONT_INFO_STRING_ID_COUNT1                            :: 26;
 }
 
 kbts_variation_axis_flags :: u16;
@@ -12867,7 +12869,7 @@ kbts_unicode_flag_enum :: enum u32 {
     KBTS_UNICODE_FLAG_NON_SPACING_MARK        :: 64;
     KBTS_UNICODE_FLAG_RECOMPOSITION_RHS       :: 128;
 
-    KBTS_UNICODE_FLAG_MIRRORED :: 12;
+    KBTS_UNICODE_FLAG_MIRRORED                :: 12;
 }
 
 kbts_unicode_bidirectional_class :: u8;
@@ -12951,15 +12953,15 @@ kbts_line_break_class_enum :: enum u32 {
     KBTS_LINE_BREAK_CLASS_VI            :: 60;
     KBTS_LINE_BREAK_CLASS_RI            :: 61;
 
-    KBTS_LINE_BREAK_CLASS_COUNT :: 62;
+    KBTS_LINE_BREAK_CLASS_COUNT         :: 62;
 
-    KBTS_LINE_BREAK_CLASS_CM  :: 63;
-    KBTS_LINE_BREAK_CLASS_ZWJ :: 64;
+    KBTS_LINE_BREAK_CLASS_CM            :: 63;
+    KBTS_LINE_BREAK_CLASS_ZWJ           :: 64;
 
-    KBTS_LINE_BREAK_CLASS_CJ :: 65;
+    KBTS_LINE_BREAK_CLASS_CJ            :: 65;
 
-    KBTS_LINE_BREAK_CLASS_SOT :: 66;
-    KBTS_LINE_BREAK_CLASS_EOT :: 67;
+    KBTS_LINE_BREAK_CLASS_SOT           :: 66;
+    KBTS_LINE_BREAK_CLASS_EOT           :: 67;
 }
 
 // @Cleanup: Merge EX and FO.
@@ -12987,7 +12989,7 @@ kbts_word_break_class_enum :: enum u32 {
     KBTS_WORD_BREAK_CLASS_ENL   :: 19;
     KBTS_WORD_BREAK_CLASS_WSS   :: 20;
 
-    KBTS_WORD_BREAK_CLASS_SOT :: 21;
+    KBTS_WORD_BREAK_CLASS_SOT   :: 21;
 }
 
 // Unicode defines scripts and languages.
@@ -13020,7 +13022,7 @@ kbts_shaper_enum :: enum u32 {
     KBTS_SHAPER_TIBETAN :: 7;
     KBTS_SHAPER_USE     :: 8;
 
-    KBTS_SHAPER_COUNT :: 9;
+    KBTS_SHAPER_COUNT   :: 9;
 }
 
 kbts_script_tag :: u32;
@@ -13621,18 +13623,18 @@ kbts_feature_tag_enum :: enum u32 {
     KBTS_FEATURE_TAG_zero         :: 1869768058;
 }
 
-kbts__gdef             :: struct {}
-kbts__cmap_14          :: struct {}
-kbts__gsub_gpos        :: struct {}
-kbts__maxp             :: struct {}
-kbts__hea              :: struct {}
+kbts__gdef :: struct {}
+kbts__cmap_14 :: struct {}
+kbts__gsub_gpos :: struct {}
+kbts__maxp :: struct {}
+kbts__hea :: struct {}
 kbts_shaper_properties :: struct {}
-kbts__feature          :: struct {}
-kbts__head             :: struct {}
-kbts__langsys          :: struct {}
-kbts_shape_config      :: struct {}
+kbts__feature :: struct {}
+kbts__head :: struct {}
+kbts__langsys :: struct {}
+kbts_shape_config :: struct {}
 
-kbts_glyph_config  :: struct {}
+kbts_glyph_config :: struct {}
 kbts_shape_context :: struct {}
 
 kbts_shape_scratchpad :: struct {}
@@ -13664,102 +13666,102 @@ kbts_blob_table :: struct {
 }
 
 kbts_load_font_state :: struct {
-    FontData:     *void;
-    FontDataSize: u32;
+    FontData:                             *void;
+    FontDataSize:                         u32;
 
-    Tables:              [18] kbts_blob_table;
-    LookupCount:         u32;
-    LookupSubtableCount: u32;
-    GlyphCount:          u32;
-    ScratchSize:         u32;
+    Tables:                               [18] kbts_blob_table;
+    LookupCount:                          u32;
+    LookupSubtableCount:                  u32;
+    GlyphCount:                           u32;
+    ScratchSize:                          u32;
 
     GlyphLookupMatrixSizeInBytes:         u32;
     GlyphLookupSubtableMatrixSizeInBytes: u32;
-    TotalSize: u32;
+    TotalSize:                            u32;
 }
 
 kbts_blob_header :: struct {
-    Magic:   u32;
-    Version: u32;
+    Magic:                                           u32;
+    Version:                                         u32;
 
-    LookupCount:         u32;
-    LookupSubtableCount: u32;
-    GlyphCount:          u32;
+    LookupCount:                                     u32;
+    LookupSubtableCount:                             u32;
+    GlyphCount:                                      u32;
 
-    GposLookupIndexOffset: u32;
+    GposLookupIndexOffset:                           u32;
 
     GlyphLookupMatrixOffsetFromStartOfFile:          u32;
     GlyphLookupSubtableMatrixOffsetFromStartOfFile:  u32;
     LookupSubtableIndexOffsetsOffsetFromStartOfFile: u32;
     SubtableInfosOffsetFromStartOfFile:              u32;
 
-    Tables: [18] kbts_blob_table;
+    Tables:                                          [18] kbts_blob_table;
 }
 
 kbts_font :: struct {
     Allocator:     kbts_allocator_function;
     AllocatorData: *void;
 
-    Blob:   *kbts_blob_header;
-    Cmap:   *u16;
-    Cmap14: *kbts__cmap_14;
+    Blob:          *kbts_blob_header;
+    Cmap:          *u16;
+    Cmap14:        *kbts__cmap_14;
 
     ShapingTables: [2] *kbts__gsub_gpos;
 
-    UserData: *void;
+    UserData:      *void;
 
-    Error: kbts_load_font_error;
+    Error:         kbts_load_font_error;
 }
 
 kbts_font_info :: struct {
     Strings:       [13] *u8;
     StringLengths: [13] u16;
 
-    StyleFlags: kbts_font_style_flags;
-    Weight:     kbts_font_weight;
-    Width:      kbts_font_width;
+    StyleFlags:    kbts_font_style_flags;
+    Weight:        kbts_font_weight;
+    Width:         kbts_font_width;
 }
 
 kbts_font_info2 :: struct {
-    Size: u32;
+    Size:          u32;
 
     Strings:       [13] *u8;
     StringLengths: [13] u16;
 
-    StyleFlags: kbts_font_style_flags;
-    Weight:     kbts_font_weight;
-    Width:      kbts_font_width;
+    StyleFlags:    kbts_font_style_flags;
+    Weight:        kbts_font_weight;
+    Width:         kbts_font_width;
 }
 
 kbts_font_info2_1 :: struct {
-    Base: kbts_font_info2;
+    Base:       kbts_font_info2;
 
     UnitsPerEm: u16;
 
-    XMin: s16;
-    YMin: s16;
-    XMax: s16;
-    YMax: s16;
+    XMin:       s16;
+    YMin:       s16;
+    XMax:       s16;
+    YMax:       s16;
 
-    Ascent:  s16;
-    Descent: s16;
-    LineGap: s16;
+    Ascent:     s16;
+    Descent:    s16;
+    LineGap:    s16;
 }
 
 kbts_font_info2_2 :: struct {
-    Base: kbts_font_info2;
+    Base:          kbts_font_info2;
 
     // _1
-    UnitsPerEm: u16;
+    UnitsPerEm:    u16;
 
-    XMin: s16;
-    YMin: s16;
-    XMax: s16;
-    YMax: s16;
+    XMin:          s16;
+    YMin:          s16;
+    XMax:          s16;
+    YMax:          s16;
 
-    Ascent:  s16;
-    Descent: s16;
-    LineGap: s16;
+    Ascent:        s16;
+    Descent:       s16;
+    LineGap:       s16;
 
     // For now, this is just OS2.sCapHeight.
     // If/when this is zero, we might consider trying to communicate a useful height instead of simply passing the zero along.
@@ -13798,50 +13800,50 @@ kbts_bracket :: struct {
 // This potentially requires infinite memory, which we don't have, so you may want to tweak this constant,
 // although, really, if the defaults don't work, then you have likely found very strange/adversarial text.
 kbts_break_state :: struct {
-    Breaks:     [8] kbts_break;
-    BreakCount: u32;
+    Breaks:                             [8] kbts_break;
+    BreakCount:                         u32;
 
-    ParagraphDirection:     kbts_direction;
-    UserParagraphDirection: kbts_direction;
+    ParagraphDirection:                 kbts_direction;
+    UserParagraphDirection:             kbts_direction;
 
-    CurrentPosition:        u32;
-    ParagraphStartPosition: u32;
+    CurrentPosition:                    u32;
+    ParagraphStartPosition:             u32;
 
-    LastScriptBreakPosition:     u32;
-    LastDirectionBreakPosition:  u32;
-    LastScriptBreakScript:       u8;
-    LastDirectionBreakDirection: u8;
+    LastScriptBreakPosition:            u32;
+    LastDirectionBreakPosition:         u32;
+    LastScriptBreakScript:              u8;
+    LastDirectionBreakDirection:        u8;
 
-    ScriptPositionOffset: s16;
-    ScriptCount:          u32;
-    ScriptSet:            [23] u8;
+    ScriptPositionOffset:               s16;
+    ScriptCount:                        u32;
+    ScriptSet:                          [23] u8;
 
-    Brackets:     [64] kbts_bracket;
-    BracketCount: u32;
-    Flags:        kbts_break_state_flags;
+    Brackets:                           [64] kbts_bracket;
+    BracketCount:                       u32;
+    Flags:                              kbts_break_state_flags;
 
-    FlagState:       u32; // u8(kbts_break_flags)x4
-    PositionOffset2: s16;
-    PositionOffset3: s16;
+    FlagState:                          u32; // u8(kbts_break_flags)x4
+    PositionOffset2:                    s16;
+    PositionOffset3:                    s16;
 
-    WordBreakHistory:         u32; // u8x4
-    WordBreaks:               u16; // u4x4
-    WordUnbreaks:             u16; // u4x4
-    WordBreak2PositionOffset: s16;
+    WordBreakHistory:                   u32; // u8x4
+    WordBreaks:                         u16; // u4x4
+    WordUnbreaks:                       u16; // u4x4
+    WordBreak2PositionOffset:           s16;
 
-    LineBreaks: u64; // u16x4
+    LineBreaks:                         u64; // u16x4
 
-    LineUnbreaksAsync:        u64; // u16x4
-    LineUnbreaks:             u64; // u16x4
-    LineBreakHistory:         u32; // u8(line_break_class)x4
-    LineBreak2PositionOffset: s16;
-    LineBreak3PositionOffset: s16;
+    LineUnbreaksAsync:                  u64; // u16x4
+    LineUnbreaks:                       u64; // u16x4
+    LineBreakHistory:                   u32; // u8(line_break_class)x4
+    LineBreak2PositionOffset:           s16;
+    LineBreak3PositionOffset:           s16;
 
-    LastDirection:                u8;
-    BidirectionalClass2:          u8;
-    BidirectionalClass1:          u8;
-    Bidirectional1PositionOffset: s16;
-    Bidirectional2PositionOffset: s16; // Unused
+    LastDirection:                      u8;
+    BidirectionalClass2:                u8;
+    BidirectionalClass1:                u8;
+    Bidirectional1PositionOffset:       s16;
+    Bidirectional2PositionOffset:       s16; // Unused
 
     JapaneseLineBreakStyle:             kbts_japanese_line_break_style;
     ConfigFlags:                        kbts_break_config_flags;
@@ -13852,7 +13854,7 @@ kbts_break_state :: struct {
 }
 
 kbts_decode :: struct {
-    Codepoint: s32;
+    Codepoint:                s32;
 
     SourceCharactersConsumed: s32;
     Valid:                    s32;
@@ -13871,39 +13873,39 @@ kbts_glyph_classes :: struct {
 
 kbts__bucketed_glyph :: struct {}
 kbts_glyph :: struct {
-    Prev: *kbts_glyph;
-    Next: *kbts_glyph;
+    Prev:                          *kbts_glyph;
+    Next:                          *kbts_glyph;
 
-    Codepoint: u32;
-    Id:        u16; // Glyph index. This is what you want to use to query outline data.
-    Uid:       u16;
+    Codepoint:                     u32;
+    Id:                            u16; // Glyph index. This is what you want to use to query outline data.
+    Uid:                           u16;
 
     // This field is kept and returned as-is throughout the shaping process.
     // When you are using the context API, it contains a codepoint index always!
     // To get the original user ID with the context API, you need to get the corresponding kbts_shape_codepoint
     // with kbts_ShapeGetShapeCodepoint(Context, Glyph->UserIdOrCodepointIndex, ...);
-    UserIdOrCodepointIndex: s32;
+    UserIdOrCodepointIndex:        s32;
 
     // Used by GPOS
-    OffsetX:  s32;
-    OffsetY:  s32;
-    AdvanceX: s32;
-    AdvanceY: s32;
+    OffsetX:                       s32;
+    OffsetY:                       s32;
+    AdvanceX:                      s32;
+    AdvanceY:                      s32;
 
-    AttachGlyph: *kbts_glyph; // Set by GPOS attachments.
+    AttachGlyph:                   *kbts_glyph; // Set by GPOS attachments.
 
-    Config: *kbts_glyph_config;
+    Config:                        *kbts_glyph_config;
 
-    Classes: kbts_glyph_classes;
+    Classes:                       kbts_glyph_classes;
 
-    Flags: kbts_glyph_flags;
+    Flags:                         kbts_glyph_flags;
 
-    ParentInfo: u32;
+    ParentInfo:                    u32;
 
-    Bucketed:            *kbts__bucketed_glyph;
-    SortKey:             u32;
-    SortKeyInterval:     u32;
-    BucketedBucketIndex: u16;
+    Bucketed:                      *kbts__bucketed_glyph;
+    SortKey:                       u32;
+    SortKeyInterval:               u32;
+    BucketedBucketIndex:           u16;
 
     // This is set by GSUB and used by GPOS.
     // A 0-index means that we should attach to the last component in the ligature.
@@ -13921,57 +13923,57 @@ kbts_glyph :: struct {
     LigatureComponentCount:        u16;
 
     // Set in GSUB and used in GPOS, for STCH.
-    JoiningFeature: kbts_joining_feature;
+    JoiningFeature:                kbts_joining_feature;
 
     // Unicode properties filled in by CodepointToGlyph.
-    JoiningType:      kbts_unicode_joining_type;
-    UnicodeFlags:     u8;
-    SyllabicClass:    u8;
-    SyllabicPosition: u8;
-    UseClass:         u8;
-    CombiningClass:   u8;
+    JoiningType:                   kbts_unicode_joining_type;
+    UnicodeFlags:                  u8;
+    SyllabicClass:                 u8;
+    SyllabicPosition:              u8;
+    UseClass:                      u8;
+    CombiningClass:                u8;
 
-    MarkOrdering: u8; // Only used temporarily in NORMALIZE for Arabic mark reordering.
+    MarkOrdering:                  u8; // Only used temporarily in NORMALIZE for Arabic mark reordering.
 }
 
 kbts_shape_codepoint :: struct {
-    Font: *kbts_font; // Only set when (BreakFlags & KBTS_BREAK_FLAG_GRAPHEME) != 0.
+    Font:                 *kbts_font; // Only set when (BreakFlags & KBTS_BREAK_FLAG_GRAPHEME) != 0.
 
     FeatureOverrides:     *kbts_feature_override;
     FeatureOverrideCount: s32;
 
-    Codepoint: s32;
-    UserId:    s32;
+    Codepoint:            s32;
+    UserId:               s32;
 
-    BreakFlags:         kbts_break_flags;
-    Script:             kbts_script; // Only set when (BreakFlags & KBTS_BREAK_FLAG_SCRIPT) != 0.
-    Direction:          kbts_direction; // Only set when (BreakFlags & KBTS_BREAK_FLAG_DIRECTION) != 0.
-    ParagraphDirection: kbts_direction; // Only set when (BreakFlags & KBTS_BREAK_FLAG_PARAGRAPH_DIRECTION) != 0.
+    BreakFlags:           kbts_break_flags;
+    Script:               kbts_script; // Only set when (BreakFlags & KBTS_BREAK_FLAG_SCRIPT) != 0.
+    Direction:            kbts_direction; // Only set when (BreakFlags & KBTS_BREAK_FLAG_DIRECTION) != 0.
+    ParagraphDirection:   kbts_direction; // Only set when (BreakFlags & KBTS_BREAK_FLAG_PARAGRAPH_DIRECTION) != 0.
 }
 
 kbts_shape_codepoint2 :: struct {
-    Size:     s32;
-    Padding0: s32;
+    Size:                 s32;
+    Padding0:             s32;
 
-    Font:            *kbts_font; // Only set when (BreakFlags & KBTS_BREAK_FLAG_GRAPHEME) != 0.
-    VariationVector: *float; // Only set when (BreakFlags & KBTS_BREAK_FLAG_GRAPHEME) != 0.
+    Font:                 *kbts_font; // Only set when (BreakFlags & KBTS_BREAK_FLAG_GRAPHEME) != 0.
+    VariationVector:      *float; // Only set when (BreakFlags & KBTS_BREAK_FLAG_GRAPHEME) != 0.
 
     FeatureOverrides:     *kbts_feature_override;
     FeatureOverrideCount: s32;
 
-    Codepoint: s32;
-    UserId:    s32;
+    Codepoint:            s32;
+    UserId:               s32;
 
-    BreakFlags:         kbts_break_flags;
-    Script:             kbts_script; // Only set when (BreakFlags & KBTS_BREAK_FLAG_SCRIPT) != 0.
-    Direction:          kbts_direction; // Only set when (BreakFlags & KBTS_BREAK_FLAG_DIRECTION) != 0.
-    ParagraphDirection: kbts_direction; // Only set when (BreakFlags & KBTS_BREAK_FLAG_PARAGRAPH_DIRECTION) != 0.
+    BreakFlags:           kbts_break_flags;
+    Script:               kbts_script; // Only set when (BreakFlags & KBTS_BREAK_FLAG_SCRIPT) != 0.
+    Direction:            kbts_direction; // Only set when (BreakFlags & KBTS_BREAK_FLAG_DIRECTION) != 0.
+    ParagraphDirection:   kbts_direction; // Only set when (BreakFlags & KBTS_BREAK_FLAG_PARAGRAPH_DIRECTION) != 0.
 }
 
 kbts__shape_codepoint :: struct {}
 kbts_shape_codepoint_iterator :: struct {
-    Codepoint: *kbts__shape_codepoint;
-    Context:   *kbts_shape_context;
+    Codepoint:                  *kbts__shape_codepoint;
+    Context:                    *kbts_shape_context;
 
     EndBlockIndex:              u32;
     OnePastLastCodepointIndex:  u32;
@@ -13996,22 +13998,22 @@ kbts_arena_block_header :: struct {
 }
 
 kbts_arena :: struct {
-    Allocator:     kbts_allocator_function;
-    AllocatorData: *void;
+    Allocator:         kbts_allocator_function;
+    AllocatorData:     *void;
 
     BlockSentinel:     kbts_arena_block_header;
     FreeBlockSentinel: kbts_arena_block_header;
 
-    Error: s32;
+    Error:             s32;
 }
 
 kbts_glyph_storage :: struct {
-    Arena: kbts_arena;
+    Arena:             kbts_arena;
 
     GlyphSentinel:     kbts_glyph;
     FreeGlyphSentinel: kbts_glyph;
 
-    Error: s32;
+    Error:             s32;
 }
 
 kbts_glyph_parent :: struct {
@@ -14020,14 +14022,14 @@ kbts_glyph_parent :: struct {
 }
 
 kbts_font_coverage_test :: struct {
-    Font:          *kbts_font;
-    BaseCodepoint: u32;
+    Font:             *kbts_font;
+    BaseCodepoint:    u32;
 
     CurrentBaseError: s32;
     Error:            s32;
 
-    BaseParents:     [19] kbts_glyph_parent;
-    BaseParentCount: u32;
+    BaseParents:      [19] kbts_glyph_parent;
+    BaseParentCount:  u32;
 }
 
 kbts_run :: struct {
@@ -14037,7 +14039,7 @@ kbts_run :: struct {
     Direction:          kbts_direction;
     Flags:              kbts_break_flags;
 
-    Glyphs: kbts_glyph_iterator;
+    Glyphs:             kbts_glyph_iterator;
 }
 
 kbts_run2 :: struct {
@@ -14048,10 +14050,10 @@ kbts_run2 :: struct {
     Direction:          kbts_direction;
     Flags:              kbts_break_flags;
 
-    Glyphs: kbts_glyph_iterator;
+    Glyphs:             kbts_glyph_iterator;
 
     // New fields:
-    VariationVector: *float;
+    VariationVector:    *float;
 }
 
 kbts_uid :: struct {
@@ -14077,331 +14079,139 @@ kbts_variation_instance_info :: struct {
 // Context API
 // The context can do everything for you. It is pretty convenient!
 //
-kbts_SizeOfShapeContext            :: () -> s32 #foreign kb_text_shape;
-kbts_PlaceShapeContext2            :: (Allocator:     kbts_allocator_function,
-                                       AllocatorData: *void,
-                                       Memory:        *void,
-                                       Flags:         kbts_shape_context_flags) -> *kbts_shape_context #foreign kb_text_shape;
-kbts_PlaceShapeContext             :: (Allocator:     kbts_allocator_function,
-                                       AllocatorData: *void,
-                                       Memory:        *void) -> *kbts_shape_context #foreign kb_text_shape;
+kbts_SizeOfShapeContext :: () -> s32 #foreign kb_text_shape;
+kbts_PlaceShapeContext2 :: (Allocator: kbts_allocator_function, AllocatorData: *void, Memory: *void, Flags: kbts_shape_context_flags) -> *kbts_shape_context #foreign kb_text_shape;
+kbts_PlaceShapeContext :: (Allocator: kbts_allocator_function, AllocatorData: *void, Memory: *void) -> *kbts_shape_context #foreign kb_text_shape;
 kbts_PlaceShapeContextFixedMemory2 :: (Memory: *void, Size: s32, Flags: kbts_shape_context_flags) -> *kbts_shape_context #foreign kb_text_shape;
-kbts_PlaceShapeContextFixedMemory  :: (Memory: *void, Size: s32) -> *kbts_shape_context #foreign kb_text_shape;
-kbts_CreateShapeContext2           :: (Allocator:     kbts_allocator_function,
-                                       AllocatorData: *void,
-                                       Flags:         kbts_shape_context_flags) -> *kbts_shape_context #foreign kb_text_shape;
-kbts_CreateShapeContext            :: (Allocator:     kbts_allocator_function,
-                                       AllocatorData: *void) -> *kbts_shape_context #foreign kb_text_shape;
-kbts_DestroyShapeContext           :: (Context: *kbts_shape_context) -> void #foreign kb_text_shape;
+kbts_PlaceShapeContextFixedMemory :: (Memory: *void, Size: s32) -> *kbts_shape_context #foreign kb_text_shape;
+kbts_CreateShapeContext2 :: (Allocator: kbts_allocator_function, AllocatorData: *void, Flags: kbts_shape_context_flags) -> *kbts_shape_context #foreign kb_text_shape;
+kbts_CreateShapeContext :: (Allocator: kbts_allocator_function, AllocatorData: *void) -> *kbts_shape_context #foreign kb_text_shape;
+kbts_DestroyShapeContext :: (Context: *kbts_shape_context) -> void #foreign kb_text_shape;
 
-kbts_ShapePushFontFromFile2 :: (Context:           *kbts_shape_context,
-                                FileName:          *u8,
-                                FontIndex:         s32,
-                                Variations:        *kbts_variation,
-                                VariationCount:    s32,
-                                ContextFontHandle: *u32) -> *kbts_font #foreign kb_text_shape;
-kbts_ShapePushFontFromFile  :: (Context:   *kbts_shape_context,
-                                FileName:  *u8,
-                                FontIndex: s32) -> *kbts_font #foreign kb_text_shape;
+kbts_ShapePushFontFromFile2 :: (Context: *kbts_shape_context, FileName: *u8, FontIndex: s32, Variations: *kbts_variation, VariationCount: s32, ContextFontHandle: *u32) -> *kbts_font #foreign kb_text_shape;
+kbts_ShapePushFontFromFile :: (Context: *kbts_shape_context, FileName: *u8, FontIndex: s32) -> *kbts_font #foreign kb_text_shape;
 
-kbts_ShapePushFontFromMemory2       :: (Context:           *kbts_shape_context,
-                                        Memory:            *void,
-                                        Size:              s32,
-                                        FontIndex:         s32,
-                                        Variations:        *kbts_variation,
-                                        VariationCount:    s32,
-                                        ContextFontHandle: *u32) -> *kbts_font #foreign kb_text_shape;
-kbts_ShapePushFontFromMemory        :: (Context:   *kbts_shape_context,
-                                        Memory:    *void,
-                                        Size:      s32,
-                                        FontIndex: s32) -> *kbts_font #foreign kb_text_shape;
-kbts_ShapePushFont2                 :: (Context:           *kbts_shape_context,
-                                        Font:              *kbts_font,
-                                        Variations:        *kbts_variation,
-                                        VariationCount:    s32,
-                                        ContextFontHandle: *u32) -> *kbts_font #foreign kb_text_shape;
-kbts_ShapePushFont                  :: (Context: *kbts_shape_context, Font: *kbts_font) -> *kbts_font #foreign kb_text_shape;
-kbts_ShapePopFont                   :: (Context: *kbts_shape_context) -> *kbts_font #foreign kb_text_shape;
-kbts_ShapeBegin                     :: (Context:            *kbts_shape_context,
-                                        ParagraphDirection: kbts_direction,
-                                        Language:           kbts_language) -> void #foreign kb_text_shape;
-kbts_ShapeEnd                       :: (Context: *kbts_shape_context) -> void #foreign kb_text_shape;
-kbts_ShapeRun                       :: (Context: *kbts_shape_context, Run: *kbts_run) -> s32 #foreign kb_text_shape;
-kbts_ShapePushFeature               :: (Context: *kbts_shape_context, FeatureTag: u32, Value: s32) -> void #foreign kb_text_shape;
-kbts_ShapePopFeature                :: (Context: *kbts_shape_context, FeatureTag: u32) -> s32 #foreign kb_text_shape;
-kbts_ShapeCodepoint                 :: (Context: *kbts_shape_context, Codepoint: s32) -> void #foreign kb_text_shape;
-kbts_ShapeCodepointWithUserId       :: (Context:   *kbts_shape_context,
-                                        Codepoint: s32,
-                                        UserId:    s32) -> void #foreign kb_text_shape;
-kbts_ShapeUtf32                     :: (Context: *kbts_shape_context, Utf32: *s32, Length: s32) -> void #foreign kb_text_shape;
-kbts_ShapeUtf32WithUserId           :: (Context:         *kbts_shape_context,
-                                        Utf32:           *s32,
-                                        Length:          s32,
-                                        UserId:          s32,
-                                        UserIdIncrement: s32) -> void #foreign kb_text_shape;
-kbts_ShapeUtf8                      :: (Context:              *kbts_shape_context,
-                                        Utf8:                 *u8,
-                                        Length:               s32,
-                                        UserIdGenerationMode: kbts_user_id_generation_mode) -> void #foreign kb_text_shape;
-kbts_ShapeUtf8WithUserId            :: (Context:              *kbts_shape_context,
-                                        Utf8:                 *u8,
-                                        Length:               s32,
-                                        UserId:               s32,
-                                        UserIdGenerationMode: kbts_user_id_generation_mode) -> void #foreign kb_text_shape;
-kbts_ShapeError                     :: (Context: *kbts_shape_context) -> kbts_shape_error #foreign kb_text_shape;
-kbts_ShapeBeginManualRuns           :: (Context: *kbts_shape_context) -> void #foreign kb_text_shape;
-kbts_ShapeNextManualRun             :: (Context:   *kbts_shape_context,
-                                        Direction: kbts_direction,
-                                        Script:    kbts_script) -> void #foreign kb_text_shape;
-kbts_ShapeEndManualRuns             :: (Context: *kbts_shape_context) -> void #foreign kb_text_shape;
-kbts_ShapeManualBreak               :: (Context: *kbts_shape_context) -> void #foreign kb_text_shape;
+kbts_ShapePushFontFromMemory2 :: (Context: *kbts_shape_context, Memory: *void, Size: s32, FontIndex: s32, Variations: *kbts_variation, VariationCount: s32, ContextFontHandle: *u32) -> *kbts_font #foreign kb_text_shape;
+kbts_ShapePushFontFromMemory :: (Context: *kbts_shape_context, Memory: *void, Size: s32, FontIndex: s32) -> *kbts_font #foreign kb_text_shape;
+kbts_ShapePushFont2 :: (Context: *kbts_shape_context, Font: *kbts_font, Variations: *kbts_variation, VariationCount: s32, ContextFontHandle: *u32) -> *kbts_font #foreign kb_text_shape;
+kbts_ShapePushFont :: (Context: *kbts_shape_context, Font: *kbts_font) -> *kbts_font #foreign kb_text_shape;
+kbts_ShapePopFont :: (Context: *kbts_shape_context) -> *kbts_font #foreign kb_text_shape;
+kbts_ShapeBegin :: (Context: *kbts_shape_context, ParagraphDirection: kbts_direction, Language: kbts_language) -> void #foreign kb_text_shape;
+kbts_ShapeEnd :: (Context: *kbts_shape_context) -> void #foreign kb_text_shape;
+kbts_ShapeRun :: (Context: *kbts_shape_context, Run: *kbts_run) -> s32 #foreign kb_text_shape;
+kbts_ShapePushFeature :: (Context: *kbts_shape_context, FeatureTag: u32, Value: s32) -> void #foreign kb_text_shape;
+kbts_ShapePopFeature :: (Context: *kbts_shape_context, FeatureTag: u32) -> s32 #foreign kb_text_shape;
+kbts_ShapeCodepoint :: (Context: *kbts_shape_context, Codepoint: s32) -> void #foreign kb_text_shape;
+kbts_ShapeCodepointWithUserId :: (Context: *kbts_shape_context, Codepoint: s32, UserId: s32) -> void #foreign kb_text_shape;
+kbts_ShapeUtf32 :: (Context: *kbts_shape_context, Utf32: *s32, Length: s32) -> void #foreign kb_text_shape;
+kbts_ShapeUtf32WithUserId :: (Context: *kbts_shape_context, Utf32: *s32, Length: s32, UserId: s32, UserIdIncrement: s32) -> void #foreign kb_text_shape;
+kbts_ShapeUtf8 :: (Context: *kbts_shape_context, Utf8: *u8, Length: s32, UserIdGenerationMode: kbts_user_id_generation_mode) -> void #foreign kb_text_shape;
+kbts_ShapeUtf8WithUserId :: (Context: *kbts_shape_context, Utf8: *u8, Length: s32, UserId: s32, UserIdGenerationMode: kbts_user_id_generation_mode) -> void #foreign kb_text_shape;
+kbts_ShapeError :: (Context: *kbts_shape_context) -> kbts_shape_error #foreign kb_text_shape;
+kbts_ShapeBeginManualRuns :: (Context: *kbts_shape_context) -> void #foreign kb_text_shape;
+kbts_ShapeNextManualRun :: (Context: *kbts_shape_context, Direction: kbts_direction, Script: kbts_script) -> void #foreign kb_text_shape;
+kbts_ShapeEndManualRuns :: (Context: *kbts_shape_context) -> void #foreign kb_text_shape;
+kbts_ShapeManualBreak :: (Context: *kbts_shape_context) -> void #foreign kb_text_shape;
 kbts_ShapeCurrentCodepointsIterator :: (Context: *kbts_shape_context) -> kbts_shape_codepoint_iterator #foreign kb_text_shape;
-kbts_ShapeCodepointIteratorIsValid  :: (It: *kbts_shape_codepoint_iterator) -> s32 #foreign kb_text_shape;
-kbts_ShapeCodepointIteratorNext2    :: (It:             *kbts_shape_codepoint_iterator,
-                                        Codepoint:      *kbts_shape_codepoint2,
-                                        CodepointIndex: *s32) -> s32 #foreign kb_text_shape;
-kbts_ShapeCodepointIteratorNext     :: (It:             *kbts_shape_codepoint_iterator,
-                                        Codepoint:      *kbts_shape_codepoint,
-                                        CodepointIndex: *s32) -> s32 #foreign kb_text_shape;
-kbts_ShapeGetShapeCodepoint2        :: (Context:        *kbts_shape_context,
-                                        CodepointIndex: s32,
-                                        Codepoint:      *kbts_shape_codepoint2) -> s32 #foreign kb_text_shape;
-kbts_ShapeGetShapeCodepoint         :: (Context:        *kbts_shape_context,
-                                        CodepointIndex: s32,
-                                        Codepoint:      *kbts_shape_codepoint) -> s32 #foreign kb_text_shape;
-kbts_ShapeSetFontVariationVector    :: (Context:           *kbts_shape_context,
-                                        ContextFontHandle: u32,
-                                        VariationVector:   *float) -> s32 #foreign kb_text_shape;
-kbts_ShapeSetFontVariation          :: (Context:           *kbts_shape_context,
-                                        ContextFontHandle: u32,
-                                        Tag:               u32,
-                                        Value:             float) -> s32 #foreign kb_text_shape;
-kbts_ShapePushGlobalVariation       :: (Context: *kbts_shape_context,
-                                        Tag:     u32,
-                                        Value:   float) -> s32 #foreign kb_text_shape;
-kbts_ShapePopGlobalVariation        :: (Context: *kbts_shape_context, Tag: u32) -> s32 #foreign kb_text_shape;
+kbts_ShapeCodepointIteratorIsValid :: (It: *kbts_shape_codepoint_iterator) -> s32 #foreign kb_text_shape;
+kbts_ShapeCodepointIteratorNext2 :: (It: *kbts_shape_codepoint_iterator, Codepoint: *kbts_shape_codepoint2, CodepointIndex: *s32) -> s32 #foreign kb_text_shape;
+kbts_ShapeCodepointIteratorNext :: (It: *kbts_shape_codepoint_iterator, Codepoint: *kbts_shape_codepoint, CodepointIndex: *s32) -> s32 #foreign kb_text_shape;
+kbts_ShapeGetShapeCodepoint2 :: (Context: *kbts_shape_context, CodepointIndex: s32, Codepoint: *kbts_shape_codepoint2) -> s32 #foreign kb_text_shape;
+kbts_ShapeGetShapeCodepoint :: (Context: *kbts_shape_context, CodepointIndex: s32, Codepoint: *kbts_shape_codepoint) -> s32 #foreign kb_text_shape;
+kbts_ShapeSetFontVariationVector :: (Context: *kbts_shape_context, ContextFontHandle: u32, VariationVector: *float) -> s32 #foreign kb_text_shape;
+kbts_ShapeSetFontVariation :: (Context: *kbts_shape_context, ContextFontHandle: u32, Tag: u32, Value: float) -> s32 #foreign kb_text_shape;
+kbts_ShapePushGlobalVariation :: (Context: *kbts_shape_context, Tag: u32, Value: float) -> s32 #foreign kb_text_shape;
+kbts_ShapePopGlobalVariation :: (Context: *kbts_shape_context, Tag: u32) -> s32 #foreign kb_text_shape;
 
 //
 // Direct API
 //
-kbts_ShapeDirect2 :: (Scratchpad:                *kbts_shape_scratchpad,
-                      Storage:                   *kbts_glyph_storage,
-                      RunDirection:              kbts_direction,
-                      VariationVectorNormalized: *s16,
-                      Output:                    *kbts_glyph_iterator) -> kbts_shape_error #foreign kb_text_shape;
-kbts_ShapeDirect  :: (Scratchpad:   *kbts_shape_scratchpad,
-                      Storage:      *kbts_glyph_storage,
-                      RunDirection: kbts_direction,
-                      Output:       *kbts_glyph_iterator) -> kbts_shape_error #foreign kb_text_shape;
+kbts_ShapeDirect2 :: (Scratchpad: *kbts_shape_scratchpad, Storage: *kbts_glyph_storage, RunDirection: kbts_direction, VariationVectorNormalized: *s16, Output: *kbts_glyph_iterator) -> kbts_shape_error #foreign kb_text_shape;
+kbts_ShapeDirect :: (Scratchpad: *kbts_shape_scratchpad, Storage: *kbts_glyph_storage, RunDirection: kbts_direction, Output: *kbts_glyph_iterator) -> kbts_shape_error #foreign kb_text_shape;
 
-kbts_FontFromFile :: (FileName:      *u8,
-                      FontIndex:     s32,
-                      Allocator:     kbts_allocator_function,
-                      AllocatorData: *void,
-                      FileData:      **void,
-                      FileSize:      *s32) -> kbts_font #foreign kb_text_shape;
+kbts_FontFromFile :: (FileName: *u8, FontIndex: s32, Allocator: kbts_allocator_function, AllocatorData: *void, FileData: **void, FileSize: *s32) -> kbts_font #foreign kb_text_shape;
 
-kbts_FontCount      :: (FileData: *void, FileSize: s32) -> s32 #foreign kb_text_shape;
-kbts_FontFromMemory :: (FileData:      *void,
-                        FileSize:      s32,
-                        FontIndex:     s32,
-                        Allocator:     kbts_allocator_function,
-                        AllocatorData: *void) -> kbts_font #foreign kb_text_shape;
-kbts_FreeFont       :: (Font: *kbts_font) -> void #foreign kb_text_shape;
-kbts_FontIsValid    :: (Font: *kbts_font) -> s32 #foreign kb_text_shape;
-kbts_LoadFont       :: (Font:         *kbts_font,
-                        State:        *kbts_load_font_state,
-                        FontData:     *void,
-                        FontDataSize: s32,
-                        FontIndex:    s32,
-                        ScratchSize_: *s32,
-                        OutputSize_:  *s32) -> kbts_load_font_error #foreign kb_text_shape;
-kbts_PlaceBlob      :: (Font:          *kbts_font,
-                        State:         *kbts_load_font_state,
-                        ScratchMemory: *void,
-                        OutputMemory:  *void) -> kbts_load_font_error #foreign kb_text_shape;
+kbts_FontCount :: (FileData: *void, FileSize: s32) -> s32 #foreign kb_text_shape;
+kbts_FontFromMemory :: (FileData: *void, FileSize: s32, FontIndex: s32, Allocator: kbts_allocator_function, AllocatorData: *void) -> kbts_font #foreign kb_text_shape;
+kbts_FreeFont :: (Font: *kbts_font) -> void #foreign kb_text_shape;
+kbts_FontIsValid :: (Font: *kbts_font) -> s32 #foreign kb_text_shape;
+kbts_LoadFont :: (Font: *kbts_font, State: *kbts_load_font_state, FontData: *void, FontDataSize: s32, FontIndex: s32, ScratchSize_: *s32, OutputSize_: *s32) -> kbts_load_font_error #foreign kb_text_shape;
+kbts_PlaceBlob :: (Font: *kbts_font, State: *kbts_load_font_state, ScratchMemory: *void, OutputMemory: *void) -> kbts_load_font_error #foreign kb_text_shape;
 
 // Fetching font information
-kbts_GetFontInfo2             :: (Font: *kbts_font, Info: *kbts_font_info2) -> void #foreign kb_text_shape;
-kbts_GetFontInfo              :: (Font: *kbts_font, Info: *kbts_font_info) -> void #foreign kb_text_shape;
-kbts_GetVariationInfo         :: (Font: *kbts_font, AxisCount: *s32, InstanceCount: *s32) -> void #foreign kb_text_shape;
-kbts_NormalizeVariationVector :: (Font:                      *kbts_font,
-                                  VariationVector:           *float,
-                                  VariationVectorNormalized: *s16) -> void #foreign kb_text_shape;
-kbts_WindowsIdsForLanguage    :: (Language:   kbts_language,
-                                  Ids:        *kbts_windows_language_id,
-                                  IdCapacity: s32) -> s32 #foreign kb_text_shape;
-kbts_LookupFontString         :: (Font:           *kbts_font,
-                                  StringId:       kbts_font_info_string_id,
-                                  LanguageId:     kbts_windows_language_id,
-                                  String:         *u8,
-                                  StringCapacity: s32) -> s32 #foreign kb_text_shape;
+kbts_GetFontInfo2 :: (Font: *kbts_font, Info: *kbts_font_info2) -> void #foreign kb_text_shape;
+kbts_GetFontInfo :: (Font: *kbts_font, Info: *kbts_font_info) -> void #foreign kb_text_shape;
+kbts_GetVariationInfo :: (Font: *kbts_font, AxisCount: *s32, InstanceCount: *s32) -> void #foreign kb_text_shape;
+kbts_NormalizeVariationVector :: (Font: *kbts_font, VariationVector: *float, VariationVectorNormalized: *s16) -> void #foreign kb_text_shape;
+kbts_WindowsIdsForLanguage :: (Language: kbts_language, Ids: *kbts_windows_language_id, IdCapacity: s32) -> s32 #foreign kb_text_shape;
+kbts_LookupFontString :: (Font: *kbts_font, StringId: kbts_font_info_string_id, LanguageId: kbts_windows_language_id, String: *u8, StringCapacity: s32) -> s32 #foreign kb_text_shape;
 
 // A shape_config is a bag of pre-computed data for a specific shaping setup.
-kbts_SizeOfShapeConfig2 :: (Font:            *kbts_font,
-                            Script:          kbts_script,
-                            Language:        kbts_language,
-                            VariationVector: *float) -> s32 #foreign kb_text_shape;
-kbts_SizeOfShapeConfig  :: (Font:     *kbts_font,
-                            Script:   kbts_script,
-                            Language: kbts_language) -> s32 #foreign kb_text_shape;
-kbts_PlaceShapeConfig2  :: (Font:            *kbts_font,
-                            Script:          kbts_script,
-                            Language:        kbts_language,
-                            VariationVector: *float,
-                            Memory:          *void,
-                            Uid:             *kbts_uid) -> *kbts_shape_config #foreign kb_text_shape;
-kbts_PlaceShapeConfig   :: (Font:     *kbts_font,
-                            Script:   kbts_script,
-                            Language: kbts_language,
-                            Memory:   *void) -> *kbts_shape_config #foreign kb_text_shape;
-kbts_CreateShapeConfig2 :: (Font:            *kbts_font,
-                            Script:          kbts_script,
-                            Language:        kbts_language,
-                            VariationVector: *float,
-                            Allocator:       kbts_allocator_function,
-                            AllocatorData:   *void,
-                            Uid:             *kbts_uid) -> *kbts_shape_config #foreign kb_text_shape;
-kbts_CreateShapeConfig  :: (Font:          *kbts_font,
-                            Script:        kbts_script,
-                            Language:      kbts_language,
-                            Allocator:     kbts_allocator_function,
-                            AllocatorData: *void) -> *kbts_shape_config #foreign kb_text_shape;
-kbts_ShapeConfigUid     :: (Config: *kbts_shape_config, Uid: *kbts_uid) -> void #foreign kb_text_shape;
+kbts_SizeOfShapeConfig2 :: (Font: *kbts_font, Script: kbts_script, Language: kbts_language, VariationVector: *float) -> s32 #foreign kb_text_shape;
+kbts_SizeOfShapeConfig :: (Font: *kbts_font, Script: kbts_script, Language: kbts_language) -> s32 #foreign kb_text_shape;
+kbts_PlaceShapeConfig2 :: (Font: *kbts_font, Script: kbts_script, Language: kbts_language, VariationVector: *float, Memory: *void, Uid: *kbts_uid) -> *kbts_shape_config #foreign kb_text_shape;
+kbts_PlaceShapeConfig :: (Font: *kbts_font, Script: kbts_script, Language: kbts_language, Memory: *void) -> *kbts_shape_config #foreign kb_text_shape;
+kbts_CreateShapeConfig2 :: (Font: *kbts_font, Script: kbts_script, Language: kbts_language, VariationVector: *float, Allocator: kbts_allocator_function, AllocatorData: *void, Uid: *kbts_uid) -> *kbts_shape_config #foreign kb_text_shape;
+kbts_CreateShapeConfig :: (Font: *kbts_font, Script: kbts_script, Language: kbts_language, Allocator: kbts_allocator_function, AllocatorData: *void) -> *kbts_shape_config #foreign kb_text_shape;
+kbts_ShapeConfigUid :: (Config: *kbts_shape_config, Uid: *kbts_uid) -> void #foreign kb_text_shape;
 kbts_DestroyShapeConfig :: (Config: *kbts_shape_config) -> void #foreign kb_text_shape;
 
 // A glyph_storage holds and recycles glyph data.
-kbts_InitializeGlyphStorage            :: (Storage:       *kbts_glyph_storage,
-                                           Allocator:     kbts_allocator_function,
-                                           AllocatorData: *void) -> s32 #foreign kb_text_shape;
-kbts_InitializeGlyphStorageFixedMemory :: (Storage:    *kbts_glyph_storage,
-                                           Memory:     *void,
-                                           MemorySize: s32) -> s32 #foreign kb_text_shape;
-kbts_PushGlyph                         :: (Storage:   *kbts_glyph_storage,
-                                           Font:      *kbts_font,
-                                           Codepoint: s32,
-                                           Config:    *kbts_glyph_config,
-                                           UserId:    s32) -> *kbts_glyph #foreign kb_text_shape;
-kbts_ClearActiveGlyphs                 :: (Storage: *kbts_glyph_storage) -> void #foreign kb_text_shape;
-kbts_FreeAllGlyphs                     :: (Storage: *kbts_glyph_storage) -> void #foreign kb_text_shape;
-kbts_CodepointToGlyph                  :: (Font:      *kbts_font,
-                                           Codepoint: s32,
-                                           Config:    *kbts_glyph_config,
-                                           UserId:    s32) -> kbts_glyph #foreign kb_text_shape;
-kbts_CodepointToGlyphId                :: (Font: *kbts_font, Codepoint: s32) -> s32 #foreign kb_text_shape;
-kbts_ActiveGlyphIterator               :: (Storage: *kbts_glyph_storage) -> kbts_glyph_iterator #foreign kb_text_shape;
+kbts_InitializeGlyphStorage :: (Storage: *kbts_glyph_storage, Allocator: kbts_allocator_function, AllocatorData: *void) -> s32 #foreign kb_text_shape;
+kbts_InitializeGlyphStorageFixedMemory :: (Storage: *kbts_glyph_storage, Memory: *void, MemorySize: s32) -> s32 #foreign kb_text_shape;
+kbts_PushGlyph :: (Storage: *kbts_glyph_storage, Font: *kbts_font, Codepoint: s32, Config: *kbts_glyph_config, UserId: s32) -> *kbts_glyph #foreign kb_text_shape;
+kbts_ClearActiveGlyphs :: (Storage: *kbts_glyph_storage) -> void #foreign kb_text_shape;
+kbts_FreeAllGlyphs :: (Storage: *kbts_glyph_storage) -> void #foreign kb_text_shape;
+kbts_CodepointToGlyph :: (Font: *kbts_font, Codepoint: s32, Config: *kbts_glyph_config, UserId: s32) -> kbts_glyph #foreign kb_text_shape;
+kbts_CodepointToGlyphId :: (Font: *kbts_font, Codepoint: s32) -> s32 #foreign kb_text_shape;
+kbts_ActiveGlyphIterator :: (Storage: *kbts_glyph_storage) -> kbts_glyph_iterator #foreign kb_text_shape;
 
 // A glyph_config specifies glyph-specific shaping parameters.
 // A single glyph_config can be shared by multiple glyphs.
-kbts_SizeOfGlyphConfig  :: (ShapeConfig:   *kbts_shape_config,
-                            Overrides:     *kbts_feature_override,
-                            OverrideCount: s32) -> s32 #foreign kb_text_shape;
-kbts_PlaceGlyphConfig   :: (ShapeConfig:   *kbts_shape_config,
-                            Overrides:     *kbts_feature_override,
-                            OverrideCount: s32,
-                            Memory:        *void) -> *kbts_glyph_config #foreign kb_text_shape;
-kbts_CreateGlyphConfig  :: (ShapeConfig:   *kbts_shape_config,
-                            Overrides:     *kbts_feature_override,
-                            OverrideCount: s32,
-                            Allocator:     kbts_allocator_function,
-                            AllocatorData: *void) -> *kbts_glyph_config #foreign kb_text_shape;
+kbts_SizeOfGlyphConfig :: (ShapeConfig: *kbts_shape_config, Overrides: *kbts_feature_override, OverrideCount: s32) -> s32 #foreign kb_text_shape;
+kbts_PlaceGlyphConfig :: (ShapeConfig: *kbts_shape_config, Overrides: *kbts_feature_override, OverrideCount: s32, Memory: *void) -> *kbts_glyph_config #foreign kb_text_shape;
+kbts_CreateGlyphConfig :: (ShapeConfig: *kbts_shape_config, Overrides: *kbts_feature_override, OverrideCount: s32, Allocator: kbts_allocator_function, AllocatorData: *void) -> *kbts_glyph_config #foreign kb_text_shape;
 kbts_DestroyGlyphConfig :: (Config: *kbts_glyph_config) -> void #foreign kb_text_shape;
 
 // A shape_scratchpad holds all transient runtime shaping data.
 // While the shape_config is immutable and can be trivially shared among threads, a
 // shape_scratchpad is mutable and needs to be per-thread.
-kbts_SizeOfShapeScratchpad           :: (Config: *kbts_shape_config) -> u64 #foreign kb_text_shape;
-kbts_PlaceShapeScratchpad            :: (Config:        *kbts_shape_config,
-                                         Memory:        *void,
-                                         Allocator:     kbts_allocator_function,
-                                         AllocatorData: *void) -> *kbts_shape_scratchpad #foreign kb_text_shape;
-kbts_PlaceShapeScratchpadFixedMemory :: (Config: *kbts_shape_config,
-                                         Memory: *void,
-                                         Size:   s32) -> *kbts_shape_scratchpad #foreign kb_text_shape;
-kbts_CreateShapeScratchpad           :: (Config:        *kbts_shape_config,
-                                         Allocator:     kbts_allocator_function,
-                                         AllocatorData: *void) -> *kbts_shape_scratchpad #foreign kb_text_shape;
-kbts_DestroyShapeScratchpad          :: (Scratchpad: *kbts_shape_scratchpad) -> void #foreign kb_text_shape;
+kbts_SizeOfShapeScratchpad :: (Config: *kbts_shape_config) -> u64 #foreign kb_text_shape;
+kbts_PlaceShapeScratchpad :: (Config: *kbts_shape_config, Memory: *void, Allocator: kbts_allocator_function, AllocatorData: *void) -> *kbts_shape_scratchpad #foreign kb_text_shape;
+kbts_PlaceShapeScratchpadFixedMemory :: (Config: *kbts_shape_config, Memory: *void, Size: s32) -> *kbts_shape_scratchpad #foreign kb_text_shape;
+kbts_CreateShapeScratchpad :: (Config: *kbts_shape_config, Allocator: kbts_allocator_function, AllocatorData: *void) -> *kbts_shape_scratchpad #foreign kb_text_shape;
+kbts_DestroyShapeScratchpad :: (Scratchpad: *kbts_shape_scratchpad) -> void #foreign kb_text_shape;
 
 //
 // Glyph iterator
 //
-kbts_GlyphIteratorNext    :: (It: *kbts_glyph_iterator, Glyph: **kbts_glyph) -> s32 #foreign kb_text_shape;
+kbts_GlyphIteratorNext :: (It: *kbts_glyph_iterator, Glyph: **kbts_glyph) -> s32 #foreign kb_text_shape;
 kbts_GlyphIteratorIsValid :: (It: *kbts_glyph_iterator) -> s32 #foreign kb_text_shape;
 
 // This is a quick guess that stops at the first glyph that has a strong script/direction associated to it.
 // It is convenient, but only works if you are sure your input text is mono-script and mono-direction.
-kbts_GuessTextProperties      :: (Text:            *void,
-                                  TextSizeInBytes: s32,
-                                  Format:          kbts_text_format,
-                                  Direction:       *kbts_direction,
-                                  Script:          *kbts_script) -> void #foreign kb_text_shape;
-kbts_GuessTextPropertiesUtf32 :: (Utf32:      *s32,
-                                  Utf32Count: s32,
-                                  Direction:  *kbts_direction,
-                                  Script:     *kbts_script) -> void #foreign kb_text_shape;
-kbts_GuessTextPropertiesUtf8  :: (Utf8:       *u8,
-                                  Utf8Length: s32,
-                                  Direction:  *kbts_direction,
-                                  Script:     *kbts_script) -> void #foreign kb_text_shape;
+kbts_GuessTextProperties :: (Text: *void, TextSizeInBytes: s32, Format: kbts_text_format, Direction: *kbts_direction, Script: *kbts_script) -> void #foreign kb_text_shape;
+kbts_GuessTextPropertiesUtf32 :: (Utf32: *s32, Utf32Count: s32, Direction: *kbts_direction, Script: *kbts_script) -> void #foreign kb_text_shape;
+kbts_GuessTextPropertiesUtf8 :: (Utf8: *u8, Utf8Length: s32, Direction: *kbts_direction, Script: *kbts_script) -> void #foreign kb_text_shape;
 
-kbts_BreakBegin             :: (State:                  *kbts_break_state,
-                                ParagraphDirection:     kbts_direction,
-                                JapaneseLineBreakStyle: kbts_japanese_line_break_style,
-                                ConfigFlags:            kbts_break_config_flags) -> void #foreign kb_text_shape;
-kbts_BreakAddCodepoint      :: (State:             *kbts_break_state,
-                                Codepoint:         s32,
-                                PositionIncrement: s32,
-                                EndOfText:         s32) -> void #foreign kb_text_shape;
-kbts_BreakEnd               :: (State: *kbts_break_state) -> void #foreign kb_text_shape;
-kbts_Break                  :: (State: *kbts_break_state, Break: *kbts_break) -> s32 #foreign kb_text_shape;
-kbts_BreakEntireString      :: (Direction:              kbts_direction,
-                                JapaneseLineBreakStyle: kbts_japanese_line_break_style,
-                                ConfigFlags:            kbts_break_config_flags,
-                                Input:                  *void,
-                                InputSizeInBytes:       s32,
-                                InputFormat:            kbts_text_format,
-                                Breaks:                 *kbts_break,
-                                BreakCapacity:          s32,
-                                BreakCount:             *s32,
-                                BreakFlags:             *kbts_break_flags,
-                                BreakFlagCapacity:      s32,
-                                BreakFlagCount:         *s32) -> void #foreign kb_text_shape;
-kbts_BreakEntireStringUtf32 :: (Direction:              kbts_direction,
-                                JapaneseLineBreakStyle: kbts_japanese_line_break_style,
-                                ConfigFlags:            kbts_break_config_flags,
-                                Utf32:                  *s32,
-                                Utf32Count:             s32,
-                                Breaks:                 *kbts_break,
-                                BreakCapacity:          s32,
-                                BreakCount:             *s32,
-                                BreakFlags:             *kbts_break_flags,
-                                BreakFlagCapacity:      s32,
-                                BreakFlagCount:         *s32) -> void #foreign kb_text_shape;
-kbts_BreakEntireStringUtf8  :: (Direction:              kbts_direction,
-                                JapaneseLineBreakStyle: kbts_japanese_line_break_style,
-                                ConfigFlags:            kbts_break_config_flags,
-                                Utf8:                   *u8,
-                                Utf8Length:             s32,
-                                Breaks:                 *kbts_break,
-                                BreakCapacity:          s32,
-                                BreakCount:             *s32,
-                                BreakFlags:             *kbts_break_flags,
-                                BreakFlagCapacity:      s32,
-                                BreakFlagCount:         *s32) -> void #foreign kb_text_shape;
+kbts_BreakBegin :: (State: *kbts_break_state, ParagraphDirection: kbts_direction, JapaneseLineBreakStyle: kbts_japanese_line_break_style, ConfigFlags: kbts_break_config_flags) -> void #foreign kb_text_shape;
+kbts_BreakAddCodepoint :: (State: *kbts_break_state, Codepoint: s32, PositionIncrement: s32, EndOfText: s32) -> void #foreign kb_text_shape;
+kbts_BreakEnd :: (State: *kbts_break_state) -> void #foreign kb_text_shape;
+kbts_Break :: (State: *kbts_break_state, Break: *kbts_break) -> s32 #foreign kb_text_shape;
+kbts_BreakEntireString :: (Direction: kbts_direction, JapaneseLineBreakStyle: kbts_japanese_line_break_style, ConfigFlags: kbts_break_config_flags, Input: *void, InputSizeInBytes: s32, InputFormat: kbts_text_format, Breaks: *kbts_break, BreakCapacity: s32, BreakCount: *s32, BreakFlags: *kbts_break_flags, BreakFlagCapacity: s32, BreakFlagCount: *s32) -> void #foreign kb_text_shape;
+kbts_BreakEntireStringUtf32 :: (Direction: kbts_direction, JapaneseLineBreakStyle: kbts_japanese_line_break_style, ConfigFlags: kbts_break_config_flags, Utf32: *s32, Utf32Count: s32, Breaks: *kbts_break, BreakCapacity: s32, BreakCount: *s32, BreakFlags: *kbts_break_flags, BreakFlagCapacity: s32, BreakFlagCount: *s32) -> void #foreign kb_text_shape;
+kbts_BreakEntireStringUtf8 :: (Direction: kbts_direction, JapaneseLineBreakStyle: kbts_japanese_line_break_style, ConfigFlags: kbts_break_config_flags, Utf8: *u8, Utf8Length: s32, Breaks: *kbts_break, BreakCapacity: s32, BreakCount: *s32, BreakFlags: *kbts_break_flags, BreakFlagCapacity: s32, BreakFlagCount: *s32) -> void #foreign kb_text_shape;
 
 // Quick test for font support of a sequence of codepoints.
-kbts_FontCoverageTestBegin     :: (Test: *kbts_font_coverage_test, Font: *kbts_font) -> void #foreign kb_text_shape;
+kbts_FontCoverageTestBegin :: (Test: *kbts_font_coverage_test, Font: *kbts_font) -> void #foreign kb_text_shape;
 kbts_FontCoverageTestCodepoint :: (Test: *kbts_font_coverage_test, Codepoint: s32) -> void #foreign kb_text_shape;
-kbts_FontCoverageTestEnd       :: (Test: *kbts_font_coverage_test) -> s32 #foreign kb_text_shape;
+kbts_FontCoverageTestEnd :: (Test: *kbts_font_coverage_test) -> s32 #foreign kb_text_shape;
 
-kbts_DecodeUtf8        :: (Utf8: *u8, Length: u64) -> kbts_decode #foreign kb_text_shape;
-kbts_DecodeUtf16       :: (Utf16:  *u16,
-                           Length: u64,
-                           Flags:  kbts_decode_utf16_flags) -> kbts_decode #foreign kb_text_shape;
-kbts_EncodeUtf8        :: (Codepoint: s32) -> kbts_encode_utf8 #foreign kb_text_shape;
-kbts_ScriptDirection   :: (Script: kbts_script) -> kbts_direction #foreign kb_text_shape;
-kbts_ScriptIsComplex   :: (Script: kbts_script) -> s32 #foreign kb_text_shape;
+kbts_DecodeUtf8 :: (Utf8: *u8, Length: u64) -> kbts_decode #foreign kb_text_shape;
+kbts_DecodeUtf16 :: (Utf16: *u16, Length: u64, Flags: kbts_decode_utf16_flags) -> kbts_decode #foreign kb_text_shape;
+kbts_EncodeUtf8 :: (Codepoint: s32) -> kbts_encode_utf8 #foreign kb_text_shape;
+kbts_ScriptDirection :: (Script: kbts_script) -> kbts_direction #foreign kb_text_shape;
+kbts_ScriptIsComplex :: (Script: kbts_script) -> s32 #foreign kb_text_shape;
 kbts_ScriptTagToScript :: (Tag: kbts_script_tag) -> kbts_script #foreign kb_text_shape;
 
 #scope_file
@@ -14410,12 +14220,6 @@ kbts_ScriptTagToScript :: (Tag: kbts_script_tag) -> kbts_script #foreign kb_text
 kb_text_shape :: #library,no_dll "vendor/kb_text_shape-darwin";
 
 #scope_export
-//
-// This file was auto-generated using the following command:
-//
-// jai generate.jai
-//
-
 
 
 FT_RENDER_POOL_SIZE :: 16384;
@@ -14444,27 +14248,27 @@ CFF_CONFIG_OPTION_DARKENING_PARAMETER_Y4 :: 0;
 
 FT_INT64_ZERO :: 0;
 
-FT_OUTLINE_NONE            :: 0x0;
-FT_OUTLINE_OWNER           :: 0x1;
-FT_OUTLINE_EVEN_ODD_FILL   :: 0x2;
-FT_OUTLINE_REVERSE_FILL    :: 0x4;
+FT_OUTLINE_NONE :: 0x0;
+FT_OUTLINE_OWNER :: 0x1;
+FT_OUTLINE_EVEN_ODD_FILL :: 0x2;
+FT_OUTLINE_REVERSE_FILL :: 0x4;
 FT_OUTLINE_IGNORE_DROPOUTS :: 0x8;
-FT_OUTLINE_SMART_DROPOUTS  :: 0x10;
-FT_OUTLINE_INCLUDE_STUBS   :: 0x20;
-FT_OUTLINE_OVERLAP         :: 0x40;
+FT_OUTLINE_SMART_DROPOUTS :: 0x10;
+FT_OUTLINE_INCLUDE_STUBS :: 0x20;
+FT_OUTLINE_OVERLAP :: 0x40;
 
 FT_OUTLINE_HIGH_PRECISION :: 0x100;
-FT_OUTLINE_SINGLE_PASS    :: 0x200;
+FT_OUTLINE_SINGLE_PASS :: 0x200;
 
-ft_outline_none            :: FT_OUTLINE_NONE;
-ft_outline_owner           :: FT_OUTLINE_OWNER;
-ft_outline_even_odd_fill   :: FT_OUTLINE_EVEN_ODD_FILL;
-ft_outline_reverse_fill    :: FT_OUTLINE_REVERSE_FILL;
+ft_outline_none :: FT_OUTLINE_NONE;
+ft_outline_owner :: FT_OUTLINE_OWNER;
+ft_outline_even_odd_fill :: FT_OUTLINE_EVEN_ODD_FILL;
+ft_outline_reverse_fill :: FT_OUTLINE_REVERSE_FILL;
 ft_outline_ignore_dropouts :: FT_OUTLINE_IGNORE_DROPOUTS;
-ft_outline_high_precision  :: FT_OUTLINE_HIGH_PRECISION;
-ft_outline_single_pass     :: FT_OUTLINE_SINGLE_PASS;
+ft_outline_high_precision :: FT_OUTLINE_HIGH_PRECISION;
+ft_outline_single_pass :: FT_OUTLINE_SINGLE_PASS;
 
-FT_CURVE_TAG_ON    :: 0x01;
+FT_CURVE_TAG_ON :: 0x01;
 FT_CURVE_TAG_CONIC :: 0x00;
 FT_CURVE_TAG_CUBIC :: 0x02;
 
@@ -14475,9 +14279,9 @@ FT_CURVE_TAG_TOUCH_Y :: 0x10;
 
 FT_CURVE_TAG_TOUCH_BOTH :: FT_CURVE_TAG_TOUCH_X | FT_CURVE_TAG_TOUCH_Y;
 
-FT_Curve_Tag_On      :: FT_CURVE_TAG_ON;
-FT_Curve_Tag_Conic   :: FT_CURVE_TAG_CONIC;
-FT_Curve_Tag_Cubic   :: FT_CURVE_TAG_CUBIC;
+FT_Curve_Tag_On :: FT_CURVE_TAG_ON;
+FT_Curve_Tag_Conic :: FT_CURVE_TAG_CONIC;
+FT_Curve_Tag_Cubic :: FT_CURVE_TAG_CUBIC;
 FT_Curve_Tag_Touch_X :: FT_CURVE_TAG_TOUCH_X;
 FT_Curve_Tag_Touch_Y :: FT_CURVE_TAG_TOUCH_Y;
 
@@ -14492,15 +14296,15 @@ FT_Outline_CubicTo_Func :: FT_Outline_CubicToFunc;
 FT_Raster_Span_Func :: FT_SpanFunc;
 
 FT_RASTER_FLAG_DEFAULT :: 0x0;
-FT_RASTER_FLAG_AA      :: 0x1;
-FT_RASTER_FLAG_DIRECT  :: 0x2;
-FT_RASTER_FLAG_CLIP    :: 0x4;
-FT_RASTER_FLAG_SDF     :: 0x8;
+FT_RASTER_FLAG_AA :: 0x1;
+FT_RASTER_FLAG_DIRECT :: 0x2;
+FT_RASTER_FLAG_CLIP :: 0x4;
+FT_RASTER_FLAG_SDF :: 0x8;
 
 ft_raster_flag_default :: FT_RASTER_FLAG_DEFAULT;
-ft_raster_flag_aa      :: FT_RASTER_FLAG_AA;
-ft_raster_flag_direct  :: FT_RASTER_FLAG_DIRECT;
-ft_raster_flag_clip    :: FT_RASTER_FLAG_CLIP;
+ft_raster_flag_aa :: FT_RASTER_FLAG_AA;
+ft_raster_flag_direct :: FT_RASTER_FLAG_DIRECT;
+ft_raster_flag_clip :: FT_RASTER_FLAG_CLIP;
 
 FT_Raster_New_Func :: FT_Raster_NewFunc;
 
@@ -14514,95 +14318,95 @@ FT_Raster_Render_Func :: FT_Raster_RenderFunc;
 
 FT_ERR_BASE :: 0;
 
-FT_FACE_FLAG_SCALABLE         :: 1 << 0;
-FT_FACE_FLAG_FIXED_SIZES      :: 1 << 1;
-FT_FACE_FLAG_FIXED_WIDTH      :: 1 << 2;
-FT_FACE_FLAG_SFNT             :: 1 << 3;
-FT_FACE_FLAG_HORIZONTAL       :: 1 << 4;
-FT_FACE_FLAG_VERTICAL         :: 1 << 5;
-FT_FACE_FLAG_KERNING          :: 1 << 6;
-FT_FACE_FLAG_FAST_GLYPHS      :: 1 << 7;
+FT_FACE_FLAG_SCALABLE :: 1 << 0;
+FT_FACE_FLAG_FIXED_SIZES :: 1 << 1;
+FT_FACE_FLAG_FIXED_WIDTH :: 1 << 2;
+FT_FACE_FLAG_SFNT :: 1 << 3;
+FT_FACE_FLAG_HORIZONTAL :: 1 << 4;
+FT_FACE_FLAG_VERTICAL :: 1 << 5;
+FT_FACE_FLAG_KERNING :: 1 << 6;
+FT_FACE_FLAG_FAST_GLYPHS :: 1 << 7;
 FT_FACE_FLAG_MULTIPLE_MASTERS :: 1 << 8;
-FT_FACE_FLAG_GLYPH_NAMES      :: 1 << 9;
-FT_FACE_FLAG_EXTERNAL_STREAM  :: 1 << 10;
-FT_FACE_FLAG_HINTER           :: 1 << 11;
-FT_FACE_FLAG_CID_KEYED        :: 1 << 12;
-FT_FACE_FLAG_TRICKY           :: 1 << 13;
-FT_FACE_FLAG_COLOR            :: 1 << 14;
-FT_FACE_FLAG_VARIATION        :: 1 << 15;
-FT_FACE_FLAG_SVG              :: 1 << 16;
-FT_FACE_FLAG_SBIX             :: 1 << 17;
-FT_FACE_FLAG_SBIX_OVERLAY     :: 1 << 18;
+FT_FACE_FLAG_GLYPH_NAMES :: 1 << 9;
+FT_FACE_FLAG_EXTERNAL_STREAM :: 1 << 10;
+FT_FACE_FLAG_HINTER :: 1 << 11;
+FT_FACE_FLAG_CID_KEYED :: 1 << 12;
+FT_FACE_FLAG_TRICKY :: 1 << 13;
+FT_FACE_FLAG_COLOR :: 1 << 14;
+FT_FACE_FLAG_VARIATION :: 1 << 15;
+FT_FACE_FLAG_SVG :: 1 << 16;
+FT_FACE_FLAG_SBIX :: 1 << 17;
+FT_FACE_FLAG_SBIX_OVERLAY :: 1 << 18;
 
 FT_STYLE_FLAG_ITALIC :: 1 << 0;
-FT_STYLE_FLAG_BOLD   :: 1 << 1;
+FT_STYLE_FLAG_BOLD :: 1 << 1;
 
-FT_OPEN_MEMORY   :: 0x1;
-FT_OPEN_STREAM   :: 0x2;
+FT_OPEN_MEMORY :: 0x1;
+FT_OPEN_STREAM :: 0x2;
 FT_OPEN_PATHNAME :: 0x4;
-FT_OPEN_DRIVER   :: 0x8;
-FT_OPEN_PARAMS   :: 0x10;
+FT_OPEN_DRIVER :: 0x8;
+FT_OPEN_PARAMS :: 0x10;
 
-ft_open_memory   :: FT_OPEN_MEMORY;
-ft_open_stream   :: FT_OPEN_STREAM;
+ft_open_memory :: FT_OPEN_MEMORY;
+ft_open_stream :: FT_OPEN_STREAM;
 ft_open_pathname :: FT_OPEN_PATHNAME;
-ft_open_driver   :: FT_OPEN_DRIVER;
-ft_open_params   :: FT_OPEN_PARAMS;
+ft_open_driver :: FT_OPEN_DRIVER;
+ft_open_params :: FT_OPEN_PARAMS;
 
-FT_LOAD_DEFAULT                     :: 0x0;
-FT_LOAD_NO_SCALE                    :: 1 << 0;
-FT_LOAD_NO_HINTING                  :: 1 << 1;
-FT_LOAD_RENDER                      :: 1 << 2;
-FT_LOAD_NO_BITMAP                   :: 1 << 3;
-FT_LOAD_VERTICAL_LAYOUT             :: 1 << 4;
-FT_LOAD_FORCE_AUTOHINT              :: 1 << 5;
-FT_LOAD_CROP_BITMAP                 :: 1 << 6;
-FT_LOAD_PEDANTIC                    :: 1 << 7;
+FT_LOAD_DEFAULT :: 0x0;
+FT_LOAD_NO_SCALE :: 1 << 0;
+FT_LOAD_NO_HINTING :: 1 << 1;
+FT_LOAD_RENDER :: 1 << 2;
+FT_LOAD_NO_BITMAP :: 1 << 3;
+FT_LOAD_VERTICAL_LAYOUT :: 1 << 4;
+FT_LOAD_FORCE_AUTOHINT :: 1 << 5;
+FT_LOAD_CROP_BITMAP :: 1 << 6;
+FT_LOAD_PEDANTIC :: 1 << 7;
 FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH :: 1 << 9;
-FT_LOAD_NO_RECURSE                  :: 1 << 10;
-FT_LOAD_IGNORE_TRANSFORM            :: 1 << 11;
-FT_LOAD_MONOCHROME                  :: 1 << 12;
-FT_LOAD_LINEAR_DESIGN               :: 1 << 13;
-FT_LOAD_SBITS_ONLY                  :: 1 << 14;
-FT_LOAD_NO_AUTOHINT                 :: 1 << 15;
+FT_LOAD_NO_RECURSE :: 1 << 10;
+FT_LOAD_IGNORE_TRANSFORM :: 1 << 11;
+FT_LOAD_MONOCHROME :: 1 << 12;
+FT_LOAD_LINEAR_DESIGN :: 1 << 13;
+FT_LOAD_SBITS_ONLY :: 1 << 14;
+FT_LOAD_NO_AUTOHINT :: 1 << 15;
 
-FT_LOAD_COLOR               :: 1 << 20;
-FT_LOAD_COMPUTE_METRICS     :: 1 << 21;
+FT_LOAD_COLOR :: 1 << 20;
+FT_LOAD_COMPUTE_METRICS :: 1 << 21;
 FT_LOAD_BITMAP_METRICS_ONLY :: 1 << 22;
-FT_LOAD_NO_SVG              :: 1 << 24;
+FT_LOAD_NO_SVG :: 1 << 24;
 
 FT_LOAD_ADVANCE_ONLY :: 1 << 8;
-FT_LOAD_SVG_ONLY     :: 1 << 23;
+FT_LOAD_SVG_ONLY :: 1 << 23;
 
-FT_SUBGLYPH_FLAG_ARGS_ARE_WORDS     :: 1;
+FT_SUBGLYPH_FLAG_ARGS_ARE_WORDS :: 1;
 FT_SUBGLYPH_FLAG_ARGS_ARE_XY_VALUES :: 2;
-FT_SUBGLYPH_FLAG_ROUND_XY_TO_GRID   :: 4;
-FT_SUBGLYPH_FLAG_SCALE              :: 8;
-FT_SUBGLYPH_FLAG_XY_SCALE           :: 0x40;
-FT_SUBGLYPH_FLAG_2X2                :: 0x80;
-FT_SUBGLYPH_FLAG_USE_MY_METRICS     :: 0x200;
+FT_SUBGLYPH_FLAG_ROUND_XY_TO_GRID :: 4;
+FT_SUBGLYPH_FLAG_SCALE :: 8;
+FT_SUBGLYPH_FLAG_XY_SCALE :: 0x40;
+FT_SUBGLYPH_FLAG_2X2 :: 0x80;
+FT_SUBGLYPH_FLAG_USE_MY_METRICS :: 0x200;
 
-FT_FSTYPE_INSTALLABLE_EMBEDDING        :: 0x0000;
+FT_FSTYPE_INSTALLABLE_EMBEDDING :: 0x0000;
 FT_FSTYPE_RESTRICTED_LICENSE_EMBEDDING :: 0x0002;
-FT_FSTYPE_PREVIEW_AND_PRINT_EMBEDDING  :: 0x0004;
-FT_FSTYPE_EDITABLE_EMBEDDING           :: 0x0008;
-FT_FSTYPE_NO_SUBSETTING                :: 0x0100;
-FT_FSTYPE_BITMAP_EMBEDDING_ONLY        :: 0x0200;
+FT_FSTYPE_PREVIEW_AND_PRINT_EMBEDDING :: 0x0004;
+FT_FSTYPE_EDITABLE_EMBEDDING :: 0x0008;
+FT_FSTYPE_NO_SUBSETTING :: 0x0100;
+FT_FSTYPE_BITMAP_EMBEDDING_ONLY :: 0x0200;
 
 FREETYPE_MAJOR :: 2;
 FREETYPE_MINOR :: 14;
 FREETYPE_PATCH :: 3;
 
-T1_MAX_MM_AXIS       :: 4;
-T1_MAX_MM_DESIGNS    :: 16;
+T1_MAX_MM_AXIS :: 4;
+T1_MAX_MM_DESIGNS :: 16;
 T1_MAX_MM_MAP_POINTS :: 20;
 
 FT_VAR_AXIS_FLAG_HIDDEN :: 1;
 
 FT_MODULE_FONT_DRIVER :: 1;
-FT_MODULE_RENDERER    :: 2;
-FT_MODULE_HINTER      :: 4;
-FT_MODULE_STYLER      :: 8;
+FT_MODULE_RENDERER :: 2;
+FT_MODULE_HINTER :: 4;
+FT_MODULE_STYLER :: 8;
 
 FT_MODULE_DRIVER_SCALABLE :: 0x100;
 
@@ -14613,13 +14417,13 @@ FT_MODULE_DRIVER_HAS_HINTER :: 0x400;
 FT_MODULE_DRIVER_HINTS_LIGHTLY :: 0x800;
 
 ft_module_font_driver :: FT_MODULE_FONT_DRIVER;
-ft_module_renderer    :: FT_MODULE_RENDERER;
-ft_module_hinter      :: FT_MODULE_HINTER;
-ft_module_styler      :: FT_MODULE_STYLER;
+ft_module_renderer :: FT_MODULE_RENDERER;
+ft_module_hinter :: FT_MODULE_HINTER;
+ft_module_styler :: FT_MODULE_STYLER;
 
-ft_module_driver_scalable      :: FT_MODULE_DRIVER_SCALABLE;
-ft_module_driver_no_outlines   :: FT_MODULE_DRIVER_NO_OUTLINES;
-ft_module_driver_has_hinter    :: FT_MODULE_DRIVER_HAS_HINTER;
+ft_module_driver_scalable :: FT_MODULE_DRIVER_SCALABLE;
+ft_module_driver_no_outlines :: FT_MODULE_DRIVER_NO_OUTLINES;
+ft_module_driver_has_hinter :: FT_MODULE_DRIVER_HAS_HINTER;
 ft_module_driver_hints_lightly :: FT_MODULE_DRIVER_HINTS_LIGHTLY;
 
 FT_DEBUG_HOOK_TRUETYPE :: 0;
@@ -14644,13 +14448,13 @@ FT_Int16 :: s16;
 */
 FT_UInt16 :: u16;
 
-FT_Int32  :: s32;
+FT_Int32 :: s32;
 FT_UInt32 :: u32;
 
-FT_Fast  :: s32;
+FT_Fast :: s32;
 FT_UFast :: u32;
 
-FT_Int64  :: s64;
+FT_Int64 :: s64;
 FT_UInt64 :: u64;
 
 /**************************************************************************
@@ -14906,18 +14710,18 @@ FT_Stream_CloseFunc :: #type (stream: FT_Stream) -> void #c_call;
 *
 */
 FT_StreamRec_ :: struct {
-    base: *u8;
-    size: u64;
-    pos:  u64;
+    base:       *u8;
+    size:       u64;
+    pos:        u64;
 
     descriptor: FT_StreamDesc;
     pathname:   FT_StreamDesc;
     read:       FT_Stream_IoFunc;
     close:      FT_Stream_CloseFunc;
 
-    memory: FT_Memory;
-    cursor: *u8;
-    limit:  *u8;
+    memory:     FT_Memory;
+    cursor:     *u8;
+    limit:      *u8;
 }
 
 /**************************************************************************
@@ -15169,7 +14973,7 @@ FT_Pixel_Mode_ :: enum u32 {
     LCD_V :: 6;
     BGRA  :: 7;
 
-    MAX :: 8;
+    MAX   :: 8;
 
     FT_PIXEL_MODE_NONE  :: NONE;
     FT_PIXEL_MODE_MONO  :: MONO;
@@ -15180,7 +14984,7 @@ FT_Pixel_Mode_ :: enum u32 {
     FT_PIXEL_MODE_LCD_V :: LCD_V;
     FT_PIXEL_MODE_BGRA  :: BGRA;
 
-    FT_PIXEL_MODE_MAX :: MAX;
+    FT_PIXEL_MODE_MAX   :: MAX;
 }
 
 /**************************************************************************
@@ -15440,11 +15244,11 @@ FT_Outline_ :: struct {
     n_contours: u16; /* number of contours in glyph        */
     n_points:   u16; /* number of points in the glyph      */
 
-    points:   *FT_Vector; /* the outline's points               */
-    tags:     *u8; /* the points flags                   */
-    contours: *u16; /* the contour end points             */
+    points:     *FT_Vector; /* the outline's points               */
+    tags:       *u8; /* the points flags                   */
+    contours:   *u16; /* the contour end points             */
 
-    flags: s32; /* outline masks                      */
+    flags:      s32; /* outline masks                      */
 }
 
 /**************************************************************************
@@ -15608,10 +15412,7 @@ FT_Outline_ConicToFunc :: #type (control: *FT_Vector, to: *FT_Vector, user: *voi
 * @return:
 *   Error code.  0~means success.
 */
-FT_Outline_CubicToFunc :: #type (control1: *FT_Vector,
-                                 control2: *FT_Vector,
-                                 to:       *FT_Vector,
-                                 user:     *void) -> s32 #c_call;
+FT_Outline_CubicToFunc :: #type (control1: *FT_Vector, control2: *FT_Vector, to: *FT_Vector, user: *void) -> s32 #c_call;
 
 /**************************************************************************
 *
@@ -15662,8 +15463,8 @@ FT_Outline_Funcs_ :: struct {
     conic_to: FT_Outline_ConicToFunc;
     cubic_to: FT_Outline_CubicToFunc;
 
-    shift: s32;
-    delta: FT_Pos;
+    shift:    s32;
+    delta:    FT_Pos;
 }
 
 /**************************************************************************
@@ -15753,7 +15554,7 @@ FT_Outline_Funcs :: FT_Outline_Funcs_;
 *     'SVG~' table.
 */
 FT_Glyph_Format_ :: enum u32 {
-    NONE :: 0;
+    NONE      :: 0;
 
     COMPOSITE :: 1668246896;
     BITMAP    :: 1651078259;
@@ -15761,7 +15562,7 @@ FT_Glyph_Format_ :: enum u32 {
     PLOTTER   :: 1886154612;
     SVG       :: 1398163232;
 
-    FT_GLYPH_FORMAT_NONE :: NONE;
+    FT_GLYPH_FORMAT_NONE      :: NONE;
 
     FT_GLYPH_FORMAT_COMPOSITE :: COMPOSITE;
     FT_GLYPH_FORMAT_BITMAP    :: BITMAP;
@@ -16222,7 +16023,7 @@ FT_Raster_RenderFunc :: #type (raster: FT_Raster, params: *FT_Raster_Params) -> 
 *     The raster destructor.
 */
 FT_Raster_Funcs_ :: struct {
-    glyph_format: FT_Glyph_Format;
+    glyph_format:    FT_Glyph_Format;
 
     raster_new:      FT_Raster_NewFunc;
     raster_reset:    FT_Raster_ResetFunc;
@@ -16827,7 +16628,7 @@ FT_Mod_Err :: enum u32 {
     GXvalid  :: 0;
     Sdf      :: 0;
 
-    Max :: 1;
+    Max      :: 1;
 
     FT_Mod_Err_Base     :: Base;
     FT_Mod_Err_Autofit  :: Autofit;
@@ -16854,393 +16655,393 @@ FT_Mod_Err :: enum u32 {
     FT_Mod_Err_GXvalid  :: GXvalid;
     FT_Mod_Err_Sdf      :: Sdf;
 
-    FT_Mod_Err_Max :: Max;
+    FT_Mod_Err_Max      :: Max;
 }
 
 FT_Err :: enum u32 {
-    Ok :: 0;
+    Ok                            :: 0;
 
-    Cannot_Open_Resource :: 1;
+    Cannot_Open_Resource          :: 1;
 
-    Unknown_File_Format :: 2;
+    Unknown_File_Format           :: 2;
 
-    Invalid_File_Format :: 3;
+    Invalid_File_Format           :: 3;
 
-    Invalid_Version :: 4;
+    Invalid_Version               :: 4;
 
-    Lower_Module_Version :: 5;
+    Lower_Module_Version          :: 5;
 
-    Invalid_Argument :: 6;
+    Invalid_Argument              :: 6;
 
-    Unimplemented_Feature :: 7;
+    Unimplemented_Feature         :: 7;
 
-    Invalid_Table :: 8;
+    Invalid_Table                 :: 8;
 
-    Invalid_Offset :: 9;
+    Invalid_Offset                :: 9;
 
-    Array_Too_Large :: 10;
+    Array_Too_Large               :: 10;
 
-    Missing_Module :: 11;
+    Missing_Module                :: 11;
 
-    Missing_Property :: 12;
+    Missing_Property              :: 12;
 
-    Invalid_Glyph_Index :: 16;
+    Invalid_Glyph_Index           :: 16;
 
-    Invalid_Character_Code :: 17;
+    Invalid_Character_Code        :: 17;
 
-    Invalid_Glyph_Format :: 18;
+    Invalid_Glyph_Format          :: 18;
 
-    Cannot_Render_Glyph :: 19;
+    Cannot_Render_Glyph           :: 19;
 
-    Invalid_Outline :: 20;
+    Invalid_Outline               :: 20;
 
-    Invalid_Composite :: 21;
+    Invalid_Composite             :: 21;
 
-    Too_Many_Hints :: 22;
+    Too_Many_Hints                :: 22;
 
-    Invalid_Pixel_Size :: 23;
+    Invalid_Pixel_Size            :: 23;
 
-    Invalid_SVG_Document :: 24;
+    Invalid_SVG_Document          :: 24;
 
-    Invalid_Handle :: 32;
+    Invalid_Handle                :: 32;
 
-    Invalid_Library_Handle :: 33;
+    Invalid_Library_Handle        :: 33;
 
-    Invalid_Driver_Handle :: 34;
+    Invalid_Driver_Handle         :: 34;
 
-    Invalid_Face_Handle :: 35;
+    Invalid_Face_Handle           :: 35;
 
-    Invalid_Size_Handle :: 36;
+    Invalid_Size_Handle           :: 36;
 
-    Invalid_Slot_Handle :: 37;
+    Invalid_Slot_Handle           :: 37;
 
-    Invalid_CharMap_Handle :: 38;
+    Invalid_CharMap_Handle        :: 38;
 
-    Invalid_Cache_Handle :: 39;
+    Invalid_Cache_Handle          :: 39;
 
-    Invalid_Stream_Handle :: 40;
+    Invalid_Stream_Handle         :: 40;
 
-    Too_Many_Drivers :: 48;
+    Too_Many_Drivers              :: 48;
 
-    Too_Many_Extensions :: 49;
+    Too_Many_Extensions           :: 49;
 
-    Out_Of_Memory :: 64;
+    Out_Of_Memory                 :: 64;
 
-    Unlisted_Object :: 65;
+    Unlisted_Object               :: 65;
 
-    Cannot_Open_Stream :: 81;
+    Cannot_Open_Stream            :: 81;
 
-    Invalid_Stream_Seek :: 82;
+    Invalid_Stream_Seek           :: 82;
 
-    Invalid_Stream_Skip :: 83;
+    Invalid_Stream_Skip           :: 83;
 
-    Invalid_Stream_Read :: 84;
+    Invalid_Stream_Read           :: 84;
 
-    Invalid_Stream_Operation :: 85;
+    Invalid_Stream_Operation      :: 85;
 
-    Invalid_Frame_Operation :: 86;
+    Invalid_Frame_Operation       :: 86;
 
-    Nested_Frame_Access :: 87;
+    Nested_Frame_Access           :: 87;
 
-    Invalid_Frame_Read :: 88;
+    Invalid_Frame_Read            :: 88;
 
-    Raster_Uninitialized :: 96;
+    Raster_Uninitialized          :: 96;
 
-    Raster_Corrupted :: 97;
+    Raster_Corrupted              :: 97;
 
-    Raster_Overflow :: 98;
+    Raster_Overflow               :: 98;
 
-    Raster_Negative_Height :: 99;
+    Raster_Negative_Height        :: 99;
 
-    Too_Many_Caches :: 112;
+    Too_Many_Caches               :: 112;
 
-    Invalid_Opcode :: 128;
+    Invalid_Opcode                :: 128;
 
-    Too_Few_Arguments :: 129;
+    Too_Few_Arguments             :: 129;
 
-    Stack_Overflow :: 130;
+    Stack_Overflow                :: 130;
 
-    Code_Overflow :: 131;
+    Code_Overflow                 :: 131;
 
-    Bad_Argument :: 132;
+    Bad_Argument                  :: 132;
 
-    Divide_By_Zero :: 133;
+    Divide_By_Zero                :: 133;
 
-    Invalid_Reference :: 134;
+    Invalid_Reference             :: 134;
 
-    Debug_OpCode :: 135;
+    Debug_OpCode                  :: 135;
 
-    ENDF_In_Exec_Stream :: 136;
+    ENDF_In_Exec_Stream           :: 136;
 
-    Nested_DEFS :: 137;
+    Nested_DEFS                   :: 137;
 
-    Invalid_CodeRange :: 138;
+    Invalid_CodeRange             :: 138;
 
-    Execution_Too_Long :: 139;
+    Execution_Too_Long            :: 139;
 
-    Too_Many_Function_Defs :: 140;
+    Too_Many_Function_Defs        :: 140;
 
-    Too_Many_Instruction_Defs :: 141;
+    Too_Many_Instruction_Defs     :: 141;
 
-    Table_Missing :: 142;
+    Table_Missing                 :: 142;
 
-    Horiz_Header_Missing :: 143;
+    Horiz_Header_Missing          :: 143;
 
-    Locations_Missing :: 144;
+    Locations_Missing             :: 144;
 
-    Name_Table_Missing :: 145;
+    Name_Table_Missing            :: 145;
 
-    CMap_Table_Missing :: 146;
+    CMap_Table_Missing            :: 146;
 
-    Hmtx_Table_Missing :: 147;
+    Hmtx_Table_Missing            :: 147;
 
-    Post_Table_Missing :: 148;
+    Post_Table_Missing            :: 148;
 
-    Invalid_Horiz_Metrics :: 149;
+    Invalid_Horiz_Metrics         :: 149;
 
-    Invalid_CharMap_Format :: 150;
+    Invalid_CharMap_Format        :: 150;
 
-    Invalid_PPem :: 151;
+    Invalid_PPem                  :: 151;
 
-    Invalid_Vert_Metrics :: 152;
+    Invalid_Vert_Metrics          :: 152;
 
-    Could_Not_Find_Context :: 153;
+    Could_Not_Find_Context        :: 153;
 
-    Invalid_Post_Table_Format :: 154;
+    Invalid_Post_Table_Format     :: 154;
 
-    Invalid_Post_Table :: 155;
+    Invalid_Post_Table            :: 155;
 
-    DEF_In_Glyf_Bytecode :: 156;
+    DEF_In_Glyf_Bytecode          :: 156;
 
-    Missing_Bitmap :: 157;
+    Missing_Bitmap                :: 157;
 
-    Missing_SVG_Hooks :: 158;
+    Missing_SVG_Hooks             :: 158;
 
-    Syntax_Error :: 160;
+    Syntax_Error                  :: 160;
 
-    Stack_Underflow :: 161;
+    Stack_Underflow               :: 161;
 
-    Ignore :: 162;
+    Ignore                        :: 162;
 
-    No_Unicode_Glyph_Name :: 163;
+    No_Unicode_Glyph_Name         :: 163;
 
-    Glyph_Too_Big :: 164;
+    Glyph_Too_Big                 :: 164;
 
-    Missing_Startfont_Field :: 176;
+    Missing_Startfont_Field       :: 176;
 
-    Missing_Font_Field :: 177;
+    Missing_Font_Field            :: 177;
 
-    Missing_Size_Field :: 178;
+    Missing_Size_Field            :: 178;
 
     Missing_Fontboundingbox_Field :: 179;
 
-    Missing_Chars_Field :: 180;
+    Missing_Chars_Field           :: 180;
 
-    Missing_Startchar_Field :: 181;
+    Missing_Startchar_Field       :: 181;
 
-    Missing_Encoding_Field :: 182;
+    Missing_Encoding_Field        :: 182;
 
-    Missing_Bbx_Field :: 183;
+    Missing_Bbx_Field             :: 183;
 
-    Bbx_Too_Big :: 184;
+    Bbx_Too_Big                   :: 184;
 
-    Corrupted_Font_Header :: 185;
+    Corrupted_Font_Header         :: 185;
 
-    Corrupted_Font_Glyphs :: 186;
+    Corrupted_Font_Glyphs         :: 186;
 
-    Max :: 187;
+    Max                           :: 187;
 
-    FT_Err_Ok :: Ok;
+    FT_Err_Ok                            :: Ok;
 
-    FT_Err_Cannot_Open_Resource :: Cannot_Open_Resource;
+    FT_Err_Cannot_Open_Resource          :: Cannot_Open_Resource;
 
-    FT_Err_Unknown_File_Format :: Unknown_File_Format;
+    FT_Err_Unknown_File_Format           :: Unknown_File_Format;
 
-    FT_Err_Invalid_File_Format :: Invalid_File_Format;
+    FT_Err_Invalid_File_Format           :: Invalid_File_Format;
 
-    FT_Err_Invalid_Version :: Invalid_Version;
+    FT_Err_Invalid_Version               :: Invalid_Version;
 
-    FT_Err_Lower_Module_Version :: Lower_Module_Version;
+    FT_Err_Lower_Module_Version          :: Lower_Module_Version;
 
-    FT_Err_Invalid_Argument :: Invalid_Argument;
+    FT_Err_Invalid_Argument              :: Invalid_Argument;
 
-    FT_Err_Unimplemented_Feature :: Unimplemented_Feature;
+    FT_Err_Unimplemented_Feature         :: Unimplemented_Feature;
 
-    FT_Err_Invalid_Table :: Invalid_Table;
+    FT_Err_Invalid_Table                 :: Invalid_Table;
 
-    FT_Err_Invalid_Offset :: Invalid_Offset;
+    FT_Err_Invalid_Offset                :: Invalid_Offset;
 
-    FT_Err_Array_Too_Large :: Array_Too_Large;
+    FT_Err_Array_Too_Large               :: Array_Too_Large;
 
-    FT_Err_Missing_Module :: Missing_Module;
+    FT_Err_Missing_Module                :: Missing_Module;
 
-    FT_Err_Missing_Property :: Missing_Property;
+    FT_Err_Missing_Property              :: Missing_Property;
 
-    FT_Err_Invalid_Glyph_Index :: Invalid_Glyph_Index;
+    FT_Err_Invalid_Glyph_Index           :: Invalid_Glyph_Index;
 
-    FT_Err_Invalid_Character_Code :: Invalid_Character_Code;
+    FT_Err_Invalid_Character_Code        :: Invalid_Character_Code;
 
-    FT_Err_Invalid_Glyph_Format :: Invalid_Glyph_Format;
+    FT_Err_Invalid_Glyph_Format          :: Invalid_Glyph_Format;
 
-    FT_Err_Cannot_Render_Glyph :: Cannot_Render_Glyph;
+    FT_Err_Cannot_Render_Glyph           :: Cannot_Render_Glyph;
 
-    FT_Err_Invalid_Outline :: Invalid_Outline;
+    FT_Err_Invalid_Outline               :: Invalid_Outline;
 
-    FT_Err_Invalid_Composite :: Invalid_Composite;
+    FT_Err_Invalid_Composite             :: Invalid_Composite;
 
-    FT_Err_Too_Many_Hints :: Too_Many_Hints;
+    FT_Err_Too_Many_Hints                :: Too_Many_Hints;
 
-    FT_Err_Invalid_Pixel_Size :: Invalid_Pixel_Size;
+    FT_Err_Invalid_Pixel_Size            :: Invalid_Pixel_Size;
 
-    FT_Err_Invalid_SVG_Document :: Invalid_SVG_Document;
+    FT_Err_Invalid_SVG_Document          :: Invalid_SVG_Document;
 
-    FT_Err_Invalid_Handle :: Invalid_Handle;
+    FT_Err_Invalid_Handle                :: Invalid_Handle;
 
-    FT_Err_Invalid_Library_Handle :: Invalid_Library_Handle;
+    FT_Err_Invalid_Library_Handle        :: Invalid_Library_Handle;
 
-    FT_Err_Invalid_Driver_Handle :: Invalid_Driver_Handle;
+    FT_Err_Invalid_Driver_Handle         :: Invalid_Driver_Handle;
 
-    FT_Err_Invalid_Face_Handle :: Invalid_Face_Handle;
+    FT_Err_Invalid_Face_Handle           :: Invalid_Face_Handle;
 
-    FT_Err_Invalid_Size_Handle :: Invalid_Size_Handle;
+    FT_Err_Invalid_Size_Handle           :: Invalid_Size_Handle;
 
-    FT_Err_Invalid_Slot_Handle :: Invalid_Slot_Handle;
+    FT_Err_Invalid_Slot_Handle           :: Invalid_Slot_Handle;
 
-    FT_Err_Invalid_CharMap_Handle :: Invalid_CharMap_Handle;
+    FT_Err_Invalid_CharMap_Handle        :: Invalid_CharMap_Handle;
 
-    FT_Err_Invalid_Cache_Handle :: Invalid_Cache_Handle;
+    FT_Err_Invalid_Cache_Handle          :: Invalid_Cache_Handle;
 
-    FT_Err_Invalid_Stream_Handle :: Invalid_Stream_Handle;
+    FT_Err_Invalid_Stream_Handle         :: Invalid_Stream_Handle;
 
-    FT_Err_Too_Many_Drivers :: Too_Many_Drivers;
+    FT_Err_Too_Many_Drivers              :: Too_Many_Drivers;
 
-    FT_Err_Too_Many_Extensions :: Too_Many_Extensions;
+    FT_Err_Too_Many_Extensions           :: Too_Many_Extensions;
 
-    FT_Err_Out_Of_Memory :: Out_Of_Memory;
+    FT_Err_Out_Of_Memory                 :: Out_Of_Memory;
 
-    FT_Err_Unlisted_Object :: Unlisted_Object;
+    FT_Err_Unlisted_Object               :: Unlisted_Object;
 
-    FT_Err_Cannot_Open_Stream :: Cannot_Open_Stream;
+    FT_Err_Cannot_Open_Stream            :: Cannot_Open_Stream;
 
-    FT_Err_Invalid_Stream_Seek :: Invalid_Stream_Seek;
+    FT_Err_Invalid_Stream_Seek           :: Invalid_Stream_Seek;
 
-    FT_Err_Invalid_Stream_Skip :: Invalid_Stream_Skip;
+    FT_Err_Invalid_Stream_Skip           :: Invalid_Stream_Skip;
 
-    FT_Err_Invalid_Stream_Read :: Invalid_Stream_Read;
+    FT_Err_Invalid_Stream_Read           :: Invalid_Stream_Read;
 
-    FT_Err_Invalid_Stream_Operation :: Invalid_Stream_Operation;
+    FT_Err_Invalid_Stream_Operation      :: Invalid_Stream_Operation;
 
-    FT_Err_Invalid_Frame_Operation :: Invalid_Frame_Operation;
+    FT_Err_Invalid_Frame_Operation       :: Invalid_Frame_Operation;
 
-    FT_Err_Nested_Frame_Access :: Nested_Frame_Access;
+    FT_Err_Nested_Frame_Access           :: Nested_Frame_Access;
 
-    FT_Err_Invalid_Frame_Read :: Invalid_Frame_Read;
+    FT_Err_Invalid_Frame_Read            :: Invalid_Frame_Read;
 
-    FT_Err_Raster_Uninitialized :: Raster_Uninitialized;
+    FT_Err_Raster_Uninitialized          :: Raster_Uninitialized;
 
-    FT_Err_Raster_Corrupted :: Raster_Corrupted;
+    FT_Err_Raster_Corrupted              :: Raster_Corrupted;
 
-    FT_Err_Raster_Overflow :: Raster_Overflow;
+    FT_Err_Raster_Overflow               :: Raster_Overflow;
 
-    FT_Err_Raster_Negative_Height :: Raster_Negative_Height;
+    FT_Err_Raster_Negative_Height        :: Raster_Negative_Height;
 
-    FT_Err_Too_Many_Caches :: Too_Many_Caches;
+    FT_Err_Too_Many_Caches               :: Too_Many_Caches;
 
-    FT_Err_Invalid_Opcode :: Invalid_Opcode;
+    FT_Err_Invalid_Opcode                :: Invalid_Opcode;
 
-    FT_Err_Too_Few_Arguments :: Too_Few_Arguments;
+    FT_Err_Too_Few_Arguments             :: Too_Few_Arguments;
 
-    FT_Err_Stack_Overflow :: Stack_Overflow;
+    FT_Err_Stack_Overflow                :: Stack_Overflow;
 
-    FT_Err_Code_Overflow :: Code_Overflow;
+    FT_Err_Code_Overflow                 :: Code_Overflow;
 
-    FT_Err_Bad_Argument :: Bad_Argument;
+    FT_Err_Bad_Argument                  :: Bad_Argument;
 
-    FT_Err_Divide_By_Zero :: Divide_By_Zero;
+    FT_Err_Divide_By_Zero                :: Divide_By_Zero;
 
-    FT_Err_Invalid_Reference :: Invalid_Reference;
+    FT_Err_Invalid_Reference             :: Invalid_Reference;
 
-    FT_Err_Debug_OpCode :: Debug_OpCode;
+    FT_Err_Debug_OpCode                  :: Debug_OpCode;
 
-    FT_Err_ENDF_In_Exec_Stream :: ENDF_In_Exec_Stream;
+    FT_Err_ENDF_In_Exec_Stream           :: ENDF_In_Exec_Stream;
 
-    FT_Err_Nested_DEFS :: Nested_DEFS;
+    FT_Err_Nested_DEFS                   :: Nested_DEFS;
 
-    FT_Err_Invalid_CodeRange :: Invalid_CodeRange;
+    FT_Err_Invalid_CodeRange             :: Invalid_CodeRange;
 
-    FT_Err_Execution_Too_Long :: Execution_Too_Long;
+    FT_Err_Execution_Too_Long            :: Execution_Too_Long;
 
-    FT_Err_Too_Many_Function_Defs :: Too_Many_Function_Defs;
+    FT_Err_Too_Many_Function_Defs        :: Too_Many_Function_Defs;
 
-    FT_Err_Too_Many_Instruction_Defs :: Too_Many_Instruction_Defs;
+    FT_Err_Too_Many_Instruction_Defs     :: Too_Many_Instruction_Defs;
 
-    FT_Err_Table_Missing :: Table_Missing;
+    FT_Err_Table_Missing                 :: Table_Missing;
 
-    FT_Err_Horiz_Header_Missing :: Horiz_Header_Missing;
+    FT_Err_Horiz_Header_Missing          :: Horiz_Header_Missing;
 
-    FT_Err_Locations_Missing :: Locations_Missing;
+    FT_Err_Locations_Missing             :: Locations_Missing;
 
-    FT_Err_Name_Table_Missing :: Name_Table_Missing;
+    FT_Err_Name_Table_Missing            :: Name_Table_Missing;
 
-    FT_Err_CMap_Table_Missing :: CMap_Table_Missing;
+    FT_Err_CMap_Table_Missing            :: CMap_Table_Missing;
 
-    FT_Err_Hmtx_Table_Missing :: Hmtx_Table_Missing;
+    FT_Err_Hmtx_Table_Missing            :: Hmtx_Table_Missing;
 
-    FT_Err_Post_Table_Missing :: Post_Table_Missing;
+    FT_Err_Post_Table_Missing            :: Post_Table_Missing;
 
-    FT_Err_Invalid_Horiz_Metrics :: Invalid_Horiz_Metrics;
+    FT_Err_Invalid_Horiz_Metrics         :: Invalid_Horiz_Metrics;
 
-    FT_Err_Invalid_CharMap_Format :: Invalid_CharMap_Format;
+    FT_Err_Invalid_CharMap_Format        :: Invalid_CharMap_Format;
 
-    FT_Err_Invalid_PPem :: Invalid_PPem;
+    FT_Err_Invalid_PPem                  :: Invalid_PPem;
 
-    FT_Err_Invalid_Vert_Metrics :: Invalid_Vert_Metrics;
+    FT_Err_Invalid_Vert_Metrics          :: Invalid_Vert_Metrics;
 
-    FT_Err_Could_Not_Find_Context :: Could_Not_Find_Context;
+    FT_Err_Could_Not_Find_Context        :: Could_Not_Find_Context;
 
-    FT_Err_Invalid_Post_Table_Format :: Invalid_Post_Table_Format;
+    FT_Err_Invalid_Post_Table_Format     :: Invalid_Post_Table_Format;
 
-    FT_Err_Invalid_Post_Table :: Invalid_Post_Table;
+    FT_Err_Invalid_Post_Table            :: Invalid_Post_Table;
 
-    FT_Err_DEF_In_Glyf_Bytecode :: DEF_In_Glyf_Bytecode;
+    FT_Err_DEF_In_Glyf_Bytecode          :: DEF_In_Glyf_Bytecode;
 
-    FT_Err_Missing_Bitmap :: Missing_Bitmap;
+    FT_Err_Missing_Bitmap                :: Missing_Bitmap;
 
-    FT_Err_Missing_SVG_Hooks :: Missing_SVG_Hooks;
+    FT_Err_Missing_SVG_Hooks             :: Missing_SVG_Hooks;
 
-    FT_Err_Syntax_Error :: Syntax_Error;
+    FT_Err_Syntax_Error                  :: Syntax_Error;
 
-    FT_Err_Stack_Underflow :: Stack_Underflow;
+    FT_Err_Stack_Underflow               :: Stack_Underflow;
 
-    FT_Err_Ignore :: Ignore;
+    FT_Err_Ignore                        :: Ignore;
 
-    FT_Err_No_Unicode_Glyph_Name :: No_Unicode_Glyph_Name;
+    FT_Err_No_Unicode_Glyph_Name         :: No_Unicode_Glyph_Name;
 
-    FT_Err_Glyph_Too_Big :: Glyph_Too_Big;
+    FT_Err_Glyph_Too_Big                 :: Glyph_Too_Big;
 
-    FT_Err_Missing_Startfont_Field :: Missing_Startfont_Field;
+    FT_Err_Missing_Startfont_Field       :: Missing_Startfont_Field;
 
-    FT_Err_Missing_Font_Field :: Missing_Font_Field;
+    FT_Err_Missing_Font_Field            :: Missing_Font_Field;
 
-    FT_Err_Missing_Size_Field :: Missing_Size_Field;
+    FT_Err_Missing_Size_Field            :: Missing_Size_Field;
 
     FT_Err_Missing_Fontboundingbox_Field :: Missing_Fontboundingbox_Field;
 
-    FT_Err_Missing_Chars_Field :: Missing_Chars_Field;
+    FT_Err_Missing_Chars_Field           :: Missing_Chars_Field;
 
-    FT_Err_Missing_Startchar_Field :: Missing_Startchar_Field;
+    FT_Err_Missing_Startchar_Field       :: Missing_Startchar_Field;
 
-    FT_Err_Missing_Encoding_Field :: Missing_Encoding_Field;
+    FT_Err_Missing_Encoding_Field        :: Missing_Encoding_Field;
 
-    FT_Err_Missing_Bbx_Field :: Missing_Bbx_Field;
+    FT_Err_Missing_Bbx_Field             :: Missing_Bbx_Field;
 
-    FT_Err_Bbx_Too_Big :: Bbx_Too_Big;
+    FT_Err_Bbx_Too_Big                   :: Bbx_Too_Big;
 
-    FT_Err_Corrupted_Font_Header :: Corrupted_Font_Header;
+    FT_Err_Corrupted_Font_Header         :: Corrupted_Font_Header;
 
-    FT_Err_Corrupted_Font_Glyphs :: Corrupted_Font_Glyphs;
+    FT_Err_Corrupted_Font_Glyphs         :: Corrupted_Font_Glyphs;
 
-    FT_Err_Max :: Max;
+    FT_Err_Max                           :: Max;
 }
 
 /**************************************************************************
@@ -17324,8 +17125,8 @@ FT_Error_String :: (error_code: FT_Error) -> *u8 #foreign freetype;
 *   `vertBearingY + height` after loading a glyph.
 */
 FT_Glyph_Metrics_ :: struct {
-    width:  FT_Pos;
-    height: FT_Pos;
+    width:        FT_Pos;
+    height:       FT_Pos;
 
     horiBearingX: FT_Pos;
     horiBearingY: FT_Pos;
@@ -17432,7 +17233,7 @@ FT_Bitmap_Size_ :: struct {
     height: FT_Short;
     width:  FT_Short;
 
-    size: FT_Pos;
+    size:   FT_Pos;
 
     x_ppem: FT_Pos;
     y_ppem: FT_Pos;
@@ -17803,59 +17604,59 @@ FT_CharMap :: *FT_CharMapRec_;
 *   `TT_MAC_LANGID_FARSI` means the Farsi variant of the Arabic encoding.
 */
 FT_Encoding_ :: enum u32 {
-    NONE :: 0;
+    NONE           :: 0;
 
-    MS_SYMBOL :: 1937337698;
-    UNICODE   :: 1970170211;
+    MS_SYMBOL      :: 1937337698;
+    UNICODE        :: 1970170211;
 
-    SJIS    :: 1936353651;
-    PRC     :: 1734484000;
-    BIG5    :: 1651074869;
-    WANSUNG :: 2002873971;
-    JOHAB   :: 1785686113;
+    SJIS           :: 1936353651;
+    PRC            :: 1734484000;
+    BIG5           :: 1651074869;
+    WANSUNG        :: 2002873971;
+    JOHAB          :: 1785686113;
 
-    GB2312     :: 1734484000;
-    MS_SJIS    :: 1936353651;
-    MS_GB2312  :: 1734484000;
-    MS_BIG5    :: 1651074869;
-    MS_WANSUNG :: 2002873971;
-    MS_JOHAB   :: 1785686113;
+    GB2312         :: 1734484000;
+    MS_SJIS        :: 1936353651;
+    MS_GB2312      :: 1734484000;
+    MS_BIG5        :: 1651074869;
+    MS_WANSUNG     :: 2002873971;
+    MS_JOHAB       :: 1785686113;
 
     ADOBE_STANDARD :: 1094995778;
     ADOBE_EXPERT   :: 1094992453;
     ADOBE_CUSTOM   :: 1094992451;
     ADOBE_LATIN_1  :: 1818326065;
 
-    OLD_LATIN_2 :: 1818326066;
+    OLD_LATIN_2    :: 1818326066;
 
-    APPLE_ROMAN :: 1634889070;
+    APPLE_ROMAN    :: 1634889070;
 
-    FT_ENCODING_NONE :: NONE;
+    FT_ENCODING_NONE           :: NONE;
 
-    FT_ENCODING_MS_SYMBOL :: MS_SYMBOL;
-    FT_ENCODING_UNICODE   :: UNICODE;
+    FT_ENCODING_MS_SYMBOL      :: MS_SYMBOL;
+    FT_ENCODING_UNICODE        :: UNICODE;
 
-    FT_ENCODING_SJIS    :: SJIS;
-    FT_ENCODING_PRC     :: PRC;
-    FT_ENCODING_BIG5    :: BIG5;
-    FT_ENCODING_WANSUNG :: WANSUNG;
-    FT_ENCODING_JOHAB   :: JOHAB;
+    FT_ENCODING_SJIS           :: SJIS;
+    FT_ENCODING_PRC            :: PRC;
+    FT_ENCODING_BIG5           :: BIG5;
+    FT_ENCODING_WANSUNG        :: WANSUNG;
+    FT_ENCODING_JOHAB          :: JOHAB;
 
-    FT_ENCODING_GB2312     :: GB2312;
-    FT_ENCODING_MS_SJIS    :: MS_SJIS;
-    FT_ENCODING_MS_GB2312  :: MS_GB2312;
-    FT_ENCODING_MS_BIG5    :: MS_BIG5;
-    FT_ENCODING_MS_WANSUNG :: MS_WANSUNG;
-    FT_ENCODING_MS_JOHAB   :: MS_JOHAB;
+    FT_ENCODING_GB2312         :: GB2312;
+    FT_ENCODING_MS_SJIS        :: MS_SJIS;
+    FT_ENCODING_MS_GB2312      :: MS_GB2312;
+    FT_ENCODING_MS_BIG5        :: MS_BIG5;
+    FT_ENCODING_MS_WANSUNG     :: MS_WANSUNG;
+    FT_ENCODING_MS_JOHAB       :: MS_JOHAB;
 
     FT_ENCODING_ADOBE_STANDARD :: ADOBE_STANDARD;
     FT_ENCODING_ADOBE_EXPERT   :: ADOBE_EXPERT;
     FT_ENCODING_ADOBE_CUSTOM   :: ADOBE_CUSTOM;
     FT_ENCODING_ADOBE_LATIN_1  :: ADOBE_LATIN_1;
 
-    FT_ENCODING_OLD_LATIN_2 :: OLD_LATIN_2;
+    FT_ENCODING_OLD_LATIN_2    :: OLD_LATIN_2;
 
-    FT_ENCODING_APPLE_ROMAN :: APPLE_ROMAN;
+    FT_ENCODING_APPLE_ROMAN    :: APPLE_ROMAN;
 }
 
 /**************************************************************************
@@ -18258,56 +18059,56 @@ FT_Face_Internal :: *FT_Face_InternalRec_;
 *   @FT_Size_Metrics.
 */
 FT_FaceRec_ :: struct {
-    num_faces:  FT_Long;
-    face_index: FT_Long;
+    num_faces:           FT_Long;
+    face_index:          FT_Long;
 
-    face_flags:  FT_Long;
-    style_flags: FT_Long;
+    face_flags:          FT_Long;
+    style_flags:         FT_Long;
 
-    num_glyphs: FT_Long;
+    num_glyphs:          FT_Long;
 
-    family_name: *FT_String;
-    style_name:  *FT_String;
+    family_name:         *FT_String;
+    style_name:          *FT_String;
 
-    num_fixed_sizes: FT_Int;
-    available_sizes: *FT_Bitmap_Size;
+    num_fixed_sizes:     FT_Int;
+    available_sizes:     *FT_Bitmap_Size;
 
-    num_charmaps: FT_Int;
-    charmaps:     *FT_CharMap;
+    num_charmaps:        FT_Int;
+    charmaps:            *FT_CharMap;
 
-    generic: FT_Generic;
+    generic:             FT_Generic;
 
     /* The following member variables (down to `underline_thickness`) */
     /* are only relevant to scalable outlines; cf. @FT_Bitmap_Size    */
     /* for bitmap fonts.                                              */
-    bbox: FT_BBox;
+    bbox:                FT_BBox;
 
-    units_per_EM: FT_UShort;
-    ascender:     FT_Short;
-    descender:    FT_Short;
-    height:       FT_Short;
+    units_per_EM:        FT_UShort;
+    ascender:            FT_Short;
+    descender:           FT_Short;
+    height:              FT_Short;
 
-    max_advance_width:  FT_Short;
-    max_advance_height: FT_Short;
+    max_advance_width:   FT_Short;
+    max_advance_height:  FT_Short;
 
     underline_position:  FT_Short;
     underline_thickness: FT_Short;
 
-    glyph:   FT_GlyphSlot;
-    size:    FT_Size;
-    charmap: FT_CharMap;
+    glyph:               FT_GlyphSlot;
+    size:                FT_Size;
+    charmap:             FT_CharMap;
 
     /* private fields, internal to FreeType */
-    driver: FT_Driver;
-    memory: FT_Memory;
-    stream: FT_Stream;
+    driver:              FT_Driver;
+    memory:              FT_Memory;
+    stream:              FT_Stream;
 
-    sizes_list: FT_ListRec;
+    sizes_list:          FT_ListRec;
 
-    autohint:   FT_Generic; /* face-specific auto-hinter data */
-    extensions: *void; /* unused                         */
+    autohint:            FT_Generic; /* face-specific auto-hinter data */
+    extensions:          *void; /* unused                         */
 
-    internal: FT_Face_Internal;
+    internal:            FT_Face_Internal;
 }
 
 /**************************************************************************
@@ -18606,11 +18407,11 @@ FT_Size_Internal :: *FT_Size_InternalRec_;
 *   ```
 */
 FT_Size_Metrics_ :: struct {
-    x_ppem: FT_UShort; /* horizontal pixels per EM               */
-    y_ppem: FT_UShort; /* vertical pixels per EM                 */
+    x_ppem:      FT_UShort; /* horizontal pixels per EM               */
+    y_ppem:      FT_UShort; /* vertical pixels per EM                 */
 
-    x_scale: FT_Fixed; /* scaling values used to convert font    */
-    y_scale: FT_Fixed; /* units to 26.6 fractional pixels        */
+    x_scale:     FT_Fixed; /* scaling values used to convert font    */
+    y_scale:     FT_Fixed; /* units to 26.6 fractional pixels        */
 
     ascender:    FT_Pos; /* ascender in 26.6 frac. pixels          */
     descender:   FT_Pos; /* descender in 26.6 frac. pixels         */
@@ -19005,37 +18806,37 @@ FT_Slot_Internal :: *FT_Slot_InternalRec_;
 *   are zero then.
 */
 FT_GlyphSlotRec_ :: struct {
-    library:     FT_Library;
-    face:        FT_Face;
-    next:        FT_GlyphSlot;
-    glyph_index: FT_UInt; /* new in 2.10; was reserved previously */
-    generic:     FT_Generic;
+    library:           FT_Library;
+    face:              FT_Face;
+    next:              FT_GlyphSlot;
+    glyph_index:       FT_UInt; /* new in 2.10; was reserved previously */
+    generic:           FT_Generic;
 
     metrics:           FT_Glyph_Metrics;
     linearHoriAdvance: FT_Fixed;
     linearVertAdvance: FT_Fixed;
     advance:           FT_Vector;
 
-    format: FT_Glyph_Format;
+    format:            FT_Glyph_Format;
 
-    bitmap:      FT_Bitmap;
-    bitmap_left: FT_Int;
-    bitmap_top:  FT_Int;
+    bitmap:            FT_Bitmap;
+    bitmap_left:       FT_Int;
+    bitmap_top:        FT_Int;
 
-    outline: FT_Outline;
+    outline:           FT_Outline;
 
-    num_subglyphs: FT_UInt;
-    subglyphs:     FT_SubGlyph;
+    num_subglyphs:     FT_UInt;
+    subglyphs:         FT_SubGlyph;
 
-    control_data: *void;
-    control_len:  s64;
+    control_data:      *void;
+    control_len:       s64;
 
-    lsb_delta: FT_Pos;
-    rsb_delta: FT_Pos;
+    lsb_delta:         FT_Pos;
+    rsb_delta:         FT_Pos;
 
-    other: *void;
+    other:             *void;
 
-    internal: FT_Slot_Internal;
+    internal:          FT_Slot_Internal;
 }
 
 /**************************************************************************
@@ -19523,10 +19324,7 @@ FT_Open_Args :: FT_Open_Args_;
 *   Use @FT_Done_Face to destroy the created @FT_Face object (along with
 *   its slot and sizes).
 */
-FT_New_Face :: (library:      FT_Library,
-                filepathname: *u8,
-                face_index:   FT_Long,
-                aface:        *FT_Face) -> FT_Error #foreign freetype;
+FT_New_Face :: (library: FT_Library, filepathname: *u8, face_index: FT_Long, aface: *FT_Face) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -19561,11 +19359,7 @@ FT_New_Face :: (library:      FT_Library,
 * @note:
 *   You must not deallocate the memory before calling @FT_Done_Face.
 */
-FT_New_Memory_Face :: (library:    FT_Library,
-                       file_base:  *FT_Byte,
-                       file_size:  FT_Long,
-                       face_index: FT_Long,
-                       aface:      *FT_Face) -> FT_Error #foreign freetype;
+FT_New_Memory_Face :: (library: FT_Library, file_base: *FT_Byte, file_size: FT_Long, face_index: FT_Long, aface: *FT_Face) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -19708,10 +19502,7 @@ FT_New_Memory_Face :: (library:    FT_Library,
 *     } while ( face_idx < num_faces )
 *   ```
 */
-FT_Open_Face :: (library:    FT_Library,
-                 args:       *FT_Open_Args,
-                 face_index: FT_Long,
-                 aface:      *FT_Face) -> FT_Error #foreign freetype;
+FT_Open_Face :: (library: FT_Library, args: *FT_Open_Args, face_index: FT_Long, aface: *FT_Face) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -19910,7 +19701,7 @@ FT_Size_Request_Type_ :: enum u32 {
     CELL     :: 3;
     SCALES   :: 4;
 
-    MAX :: 5;
+    MAX      :: 5;
 
     FT_SIZE_REQUEST_TYPE_NOMINAL  :: NOMINAL;
     FT_SIZE_REQUEST_TYPE_REAL_DIM :: REAL_DIM;
@@ -19918,7 +19709,7 @@ FT_Size_Request_Type_ :: enum u32 {
     FT_SIZE_REQUEST_TYPE_CELL     :: CELL;
     FT_SIZE_REQUEST_TYPE_SCALES   :: SCALES;
 
-    FT_SIZE_REQUEST_TYPE_MAX :: MAX;
+    FT_SIZE_REQUEST_TYPE_MAX      :: MAX;
 }
 
 /**************************************************************************
@@ -20152,11 +19943,7 @@ FT_Request_Size :: (face: FT_Face, req: FT_Size_Request) -> FT_Error #foreign fr
 *
 *   Don't use this function if you are using the FreeType cache API.
 */
-FT_Set_Char_Size :: (face:            FT_Face,
-                     char_width:      FT_F26Dot6,
-                     char_height:     FT_F26Dot6,
-                     horz_resolution: FT_UInt,
-                     vert_resolution: FT_UInt) -> FT_Error #foreign freetype;
+FT_Set_Char_Size :: (face: FT_Face, char_width: FT_F26Dot6, char_height: FT_F26Dot6, horz_resolution: FT_UInt, vert_resolution: FT_UInt) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -20408,7 +20195,7 @@ FT_Render_Mode_ :: enum u32 {
     LCD_V  :: 4;
     SDF    :: 5;
 
-    MAX :: 6;
+    MAX    :: 6;
 
     FT_RENDER_MODE_NORMAL :: NORMAL;
     FT_RENDER_MODE_LIGHT  :: LIGHT;
@@ -20417,7 +20204,7 @@ FT_Render_Mode_ :: enum u32 {
     FT_RENDER_MODE_LCD_V  :: LCD_V;
     FT_RENDER_MODE_SDF    :: SDF;
 
-    FT_RENDER_MODE_MAX :: MAX;
+    FT_RENDER_MODE_MAX    :: MAX;
 }
 
 /**************************************************************************
@@ -20716,11 +20503,7 @@ FT_Kerning_Mode :: FT_Kerning_Mode_;
 *   Use @FT_HAS_KERNING to find out whether a font has data that can be
 *   extracted with `FT_Get_Kerning`.
 */
-FT_Get_Kerning :: (face:        FT_Face,
-                   left_glyph:  FT_UInt,
-                   right_glyph: FT_UInt,
-                   kern_mode:   FT_UInt,
-                   akerning:    *FT_Vector) -> FT_Error #foreign freetype;
+FT_Get_Kerning :: (face: FT_Face, left_glyph: FT_UInt, right_glyph: FT_UInt, kern_mode: FT_UInt, akerning: *FT_Vector) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -20758,10 +20541,7 @@ FT_Get_Kerning :: (face:        FT_Face,
 *   Only very few AFM files come with track kerning data; please refer to
 *   Adobe's AFM specification for more details.
 */
-FT_Get_Track_Kerning :: (face:       FT_Face,
-                         point_size: FT_Fixed,
-                         degree:     FT_Int,
-                         akerning:   *FT_Fixed) -> FT_Error #foreign freetype;
+FT_Get_Track_Kerning :: (face: FT_Face, point_size: FT_Fixed, degree: FT_Int, akerning: *FT_Fixed) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -21044,9 +20824,7 @@ FT_Get_Next_Char :: (face: FT_Face, char_code: FT_ULong, agindex: *FT_UInt) -> F
 *   2.8
 *
 */
-FT_Face_Properties :: (face:           FT_Face,
-                       num_properties: FT_UInt,
-                       properties:     *FT_Parameter) -> FT_Error #foreign freetype;
+FT_Face_Properties :: (face: FT_Face, num_properties: FT_UInt, properties: *FT_Parameter) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -21121,10 +20899,7 @@ FT_Get_Name_Index :: (face: FT_Face, glyph_name: *FT_String) -> FT_UInt #foreign
 *   It then works only for fonts that actually embed glyph names (which
 *   many recent OpenType fonts do not).
 */
-FT_Get_Glyph_Name :: (face:        FT_Face,
-                      glyph_index: FT_UInt,
-                      buffer:      FT_Pointer,
-                      buffer_max:  FT_UInt) -> FT_Error #foreign freetype;
+FT_Get_Glyph_Name :: (face: FT_Face, glyph_index: FT_UInt, buffer: FT_Pointer, buffer_max: FT_UInt) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -21206,13 +20981,7 @@ FT_Get_Postscript_Name :: (face: FT_Face) -> *u8 #foreign freetype;
 *     https://learn.microsoft.com/typography/opentype/spec/glyf#composite-glyph-description
 *
 */
-FT_Get_SubGlyph_Info :: (glyph:       FT_GlyphSlot,
-                         sub_index:   FT_UInt,
-                         p_index:     *FT_Int,
-                         p_flags:     *FT_UInt,
-                         p_arg1:      *FT_Int,
-                         p_arg2:      *FT_Int,
-                         p_transform: *FT_Matrix) -> FT_Error #foreign freetype;
+FT_Get_SubGlyph_Info :: (glyph: FT_GlyphSlot, sub_index: FT_UInt, p_index: *FT_Int, p_flags: *FT_UInt, p_arg1: *FT_Int, p_arg2: *FT_Int, p_transform: *FT_Matrix) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -21252,9 +21021,7 @@ FT_Get_SubGlyph_Info :: (glyph:       FT_GlyphSlot,
 *   2.3.6
 *
 */
-FT_Face_GetCharVariantIndex :: (face:            FT_Face,
-                                charcode:        FT_ULong,
-                                variantSelector: FT_ULong) -> FT_UInt #foreign freetype;
+FT_Face_GetCharVariantIndex :: (face: FT_Face, charcode: FT_ULong, variantSelector: FT_ULong) -> FT_UInt #foreign freetype;
 
 /**************************************************************************
 *
@@ -21287,9 +21054,7 @@ FT_Face_GetCharVariantIndex :: (face:            FT_Face,
 *   2.3.6
 *
 */
-FT_Face_GetCharVariantIsDefault :: (face:            FT_Face,
-                                    charcode:        FT_ULong,
-                                    variantSelector: FT_ULong) -> FT_Int #foreign freetype;
+FT_Face_GetCharVariantIsDefault :: (face: FT_Face, charcode: FT_ULong, variantSelector: FT_ULong) -> FT_Int #foreign freetype;
 
 /**************************************************************************
 *
@@ -21576,10 +21341,7 @@ FT_Vector_Transform :: (vector: *FT_Vector, matrix: *FT_Matrix) -> void #foreign
 *   In such cases, the library version might not be available before the
 *   library object has been created.
 */
-FT_Library_Version :: (library: FT_Library,
-                       amajor:  *FT_Int,
-                       aminor:  *FT_Int,
-                       apatch:  *FT_Int) -> void #foreign freetype;
+FT_Library_Version :: (library: FT_Library, amajor: *FT_Int, aminor: *FT_Int, apatch: *FT_Int) -> void #foreign freetype;
 
 /**************************************************************************
 *
@@ -21725,14 +21487,14 @@ FT_Multi_Master :: FT_Multi_Master_;
 *   values are whole numbers (i.e., the fractional part is zero).
 */
 FT_Var_Axis_ :: struct {
-    name: *FT_String;
+    name:    *FT_String;
 
     minimum: FT_Fixed;
     def:     FT_Fixed;
     maximum: FT_Fixed;
 
-    tag:   FT_ULong;
-    strid: FT_UInt;
+    tag:     FT_ULong;
+    strid:   FT_UInt;
 }
 
 /**************************************************************************
@@ -22013,9 +21775,7 @@ FT_Done_MM_Var :: (library: FT_Library, amaster: *FT_MM_Var) -> FT_Error #foreig
 *   (i.e., @FT_IS_VARIATION returns true).  If `num_coords` is zero, this
 *   bit flag gets unset.
 */
-FT_Set_MM_Design_Coordinates :: (face:       FT_Face,
-                                 num_coords: FT_UInt,
-                                 coords:     *FT_Long) -> FT_Error #foreign freetype;
+FT_Set_MM_Design_Coordinates :: (face: FT_Face, num_coords: FT_UInt, coords: *FT_Long) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -22064,9 +21824,7 @@ FT_Set_MM_Design_Coordinates :: (face:       FT_Face,
 *   default value for the corresponding axis, that is, the set up face is
 *   not at its default position.
 */
-FT_Set_Var_Design_Coordinates :: (face:       FT_Face,
-                                  num_coords: FT_UInt,
-                                  coords:     *FT_Fixed) -> FT_Error #foreign freetype;
+FT_Set_Var_Design_Coordinates :: (face: FT_Face, num_coords: FT_UInt, coords: *FT_Fixed) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -22102,9 +21860,7 @@ FT_Set_Var_Design_Coordinates :: (face:       FT_Face,
 * @since:
 *   2.7.1
 */
-FT_Get_Var_Design_Coordinates :: (face:       FT_Face,
-                                  num_coords: FT_UInt,
-                                  coords:     *FT_Fixed) -> FT_Error #foreign freetype;
+FT_Get_Var_Design_Coordinates :: (face: FT_Face, num_coords: FT_UInt, coords: *FT_Fixed) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -22152,9 +21908,7 @@ FT_Get_Var_Design_Coordinates :: (face:       FT_Face,
 *   default value for the corresponding axis, that is, the set up face is
 *   not at its default position.
 */
-FT_Set_MM_Blend_Coordinates :: (face:       FT_Face,
-                                num_coords: FT_UInt,
-                                coords:     *FT_Fixed) -> FT_Error #foreign freetype;
+FT_Set_MM_Blend_Coordinates :: (face: FT_Face, num_coords: FT_UInt, coords: *FT_Fixed) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -22187,9 +21941,7 @@ FT_Set_MM_Blend_Coordinates :: (face:       FT_Face,
 * @since:
 *   2.7.1
 */
-FT_Get_MM_Blend_Coordinates :: (face:       FT_Face,
-                                num_coords: FT_UInt,
-                                coords:     *FT_Fixed) -> FT_Error #foreign freetype;
+FT_Get_MM_Blend_Coordinates :: (face: FT_Face, num_coords: FT_UInt, coords: *FT_Fixed) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -22199,9 +21951,7 @@ FT_Get_MM_Blend_Coordinates :: (face:       FT_Face,
 * @description:
 *   This is another name of @FT_Set_MM_Blend_Coordinates.
 */
-FT_Set_Var_Blend_Coordinates :: (face:       FT_Face,
-                                 num_coords: FT_UInt,
-                                 coords:     *FT_Fixed) -> FT_Error #foreign freetype;
+FT_Set_Var_Blend_Coordinates :: (face: FT_Face, num_coords: FT_UInt, coords: *FT_Fixed) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -22214,9 +21964,7 @@ FT_Set_Var_Blend_Coordinates :: (face:       FT_Face,
 * @since:
 *   2.7.1
 */
-FT_Get_Var_Blend_Coordinates :: (face:       FT_Face,
-                                 num_coords: FT_UInt,
-                                 coords:     *FT_Fixed) -> FT_Error #foreign freetype;
+FT_Get_Var_Blend_Coordinates :: (face: FT_Face, num_coords: FT_UInt, coords: *FT_Fixed) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -22489,17 +22237,17 @@ FT_Module_Requester :: #type (module: FT_Module, name: *u8) -> FT_Module_Interfa
 *     The interface requesting function.
 */
 FT_Module_Class_ :: struct {
-    module_flags:    FT_ULong;
-    module_size:     FT_Long;
-    module_name:     *FT_String;
-    module_version:  FT_Fixed;
-    module_requires: FT_Fixed;
+    module_flags:     FT_ULong;
+    module_size:      FT_Long;
+    module_name:      *FT_String;
+    module_version:   FT_Fixed;
+    module_requires:  FT_Fixed;
 
     module_interface: *void;
 
-    module_init:   FT_Module_Constructor;
-    module_done:   FT_Module_Destructor;
-    get_interface: FT_Module_Requester;
+    module_init:      FT_Module_Constructor;
+    module_done:      FT_Module_Destructor;
+    get_interface:    FT_Module_Requester;
 }
 
 /**************************************************************************
@@ -22675,10 +22423,7 @@ FT_Remove_Module :: (library: FT_Library, module: FT_Module) -> FT_Error #foreig
 *   2.4.11
 *
 */
-FT_Property_Set :: (library:       FT_Library,
-                    module_name:   *FT_String,
-                    property_name: *FT_String,
-                    value:         *void) -> FT_Error #foreign freetype;
+FT_Property_Set :: (library: FT_Library, module_name: *FT_String, property_name: *FT_String, value: *void) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -22736,10 +22481,7 @@ FT_Property_Set :: (library:       FT_Library,
 *   2.4.11
 *
 */
-FT_Property_Get :: (library:       FT_Library,
-                    module_name:   *FT_String,
-                    property_name: *FT_String,
-                    value:         *void) -> FT_Error #foreign freetype;
+FT_Property_Get :: (library: FT_Library, module_name: *FT_String, property_name: *FT_String, value: *void) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -22931,9 +22673,7 @@ FT_DebugHook_Func :: #type (arg: *void) -> FT_Error #c_call;
 *   Currently, four debug hook slots are available, but only one (for the
 *   TrueType interpreter) is defined.
 */
-FT_Set_Debug_Hook :: (library:    FT_Library,
-                      hook_index: FT_UInt,
-                      debug_hook: FT_DebugHook_Func) -> void #foreign freetype;
+FT_Set_Debug_Hook :: (library: FT_Library, hook_index: FT_UInt, debug_hook: FT_DebugHook_Func) -> void #foreign freetype;
 
 /**************************************************************************
 *
@@ -23040,7 +22780,7 @@ FT_Get_TrueType_Engine_Type :: (library: FT_Library) -> FT_TrueTypeEngineType #f
 #scope_file
 
 
-freetype  :: #library,no_dll "vendor/freetype-darwin";
+freetype :: #library,no_dll "vendor/freetype-darwin";
 ptrdiff_t :: s64;
 
 #scope_export
