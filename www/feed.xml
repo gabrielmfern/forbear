@@ -5,8 +5,17 @@
   <link href="https://www.forbear.dev/"/>
   <link rel="self" href="https://www.forbear.dev/feed.xml"/>
   <id>https://www.forbear.dev/</id>
-  <updated>2026-11-01T00:00:00Z</updated>
+  <updated>2026-11-19T00:00:00Z</updated>
   <author><name>Gabriel Miranda</name></author>
+
+  <entry>
+    <title>the first program, text input, and a C API from Jai</title>
+    <link href="https://www.forbear.dev/log/005-calculator-and-c-api.html"/>
+    <id>https://www.forbear.dev/log/005-calculator-and-c-api.html</id>
+    <published>2026-11-19T00:00:00Z</published>
+    <updated>2026-11-19T00:00:00Z</updated>
+    <summary>the first program built with forbear, text input, and a C API from Jai.</summary>
+  </entry>
 
   <entry>
     <title>React-like state (mostly) without the heap, events without callbacks</title>
