@@ -232,16 +232,16 @@ width := <span style="color:#b8a36a">use_transition</span><span style="color:#c8
 <p>Here's the Counter from the last entry, in C:</p>
 
 <pre style="background:#1c1f23;color:#aeb8c4;padding:1em;font-family:monospace"><code><span style="color:#ffffff;font-weight:bold">void </span><span style="color:#b8a36a">counter</span><span style="color:#c8d0d8">(</span><span style="color:#ffffff;font-weight:bold">void</span><span style="color:#c8d0d8">) {</span>
-    fb_s64 *count = <span style="color:#b8a36a">fb_state</span><span style="color:#c8d0d8">(</span>fb_s64<span style="color:#c8d0d8">);</span>
-    <span style="color:#b8a36a">fb_element</span><span style="color:#c8d0d8">(</span>
+    fb_s64 *count = <span style="color:#b8a36a">FB_STATE</span><span style="color:#c8d0d8">(</span>fb_s64<span style="color:#c8d0d8">);</span>
+    <span style="color:#b8a36a">FB_ELEMENT</span><span style="color:#c8d0d8">(</span>
         <span style="color:#7fa0b8">.background    </span>= <span style="color:#b8a36a">fb_color</span><span style="color:#c8d0d8">(</span><span style="color:#b8a36a">fb_rgb</span><span style="color:#c8d0d8">(</span><span style="color:#7fa0b8">44</span><span style="color:#c8d0d8">, </span><span style="color:#7fa0b8">49</span><span style="color:#c8d0d8">, </span><span style="color:#7fa0b8">56</span><span style="color:#c8d0d8">)),</span>
         <span style="color:#7fa0b8">.border_radius </span>= <span style="color:#7fa0b8">6</span><span style="color:#c8d0d8">,</span>
         <span style="color:#7fa0b8">.padding       </span>= <span style="color:#b8a36a">fb_all_sides</span><span style="color:#c8d0d8">(</span><span style="color:#7fa0b8">8</span><span style="color:#c8d0d8">),</span>
     <span style="color:#c8d0d8">) {</span>
         char count_text<span style="color:#c8d0d8">[</span><span style="color:#7fa0b8">64</span><span style="color:#c8d0d8">];</span>
         <span style="color:#b8a36a">snprintf</span><span style="color:#c8d0d8">(</span>count_text<span style="color:#c8d0d8">, </span><span style="color:#b8a36a">sizeof</span><span style="color:#c8d0d8">(</span>count_text<span style="color:#c8d0d8">), </span><span style="color:#b8a36a">"count: %lld"</span><span style="color:#c8d0d8">, (</span>long long<span style="color:#c8d0d8">)</span>*count<span style="color:#c8d0d8">);</span>
-        <span style="color:#b8a36a">fb_text</span><span style="color:#c8d0d8">(</span>count_text<span style="color:#c8d0d8">);</span>
-        <span style="color:#ffffff;font-weight:bold">if </span><span style="color:#c8d0d8">(</span><span style="color:#b8a36a">fb_on_click</span><span style="color:#c8d0d8">(</span>fb_mouse_button_left<span style="color:#c8d0d8">, </span><span style="color:#7fa0b8">true</span><span style="color:#c8d0d8">, </span><span style="color:#7fa0b8">false</span><span style="color:#c8d0d8">)) {</span>
+        <span style="color:#b8a36a">FB_TEXT</span><span style="color:#c8d0d8">(</span>count_text<span style="color:#c8d0d8">);</span>
+        <span style="color:#ffffff;font-weight:bold">if </span><span style="color:#c8d0d8">(</span><span style="color:#b8a36a">fb_on_click</span><span style="color:#c8d0d8">(</span>FB_MOUSE_BUTTON_LEFT<span style="color:#c8d0d8">, </span><span style="color:#7fa0b8">true</span><span style="color:#c8d0d8">, </span><span style="color:#7fa0b8">false</span><span style="color:#c8d0d8">)) {</span>
             *count += <span style="color:#7fa0b8">1</span><span style="color:#c8d0d8">;</span>
         <span style="color:#c8d0d8">}</span>
     <span style="color:#c8d0d8">}</span>
