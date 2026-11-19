@@ -14,18 +14,15 @@ release :: () {
     #if OS == .WINDOWS {
         platform    :: "win32";
         static_lib  :: "lib";
-        c_libraries :: string.["forbear.dll", "forbear.lib", "forbear-javascript.dll", "forbear-javascript.lib"];
-        libnode     :: string.["libnode.dll", "libnode.lib"];
+        c_libraries :: string.["forbear.dll", "forbear.lib"];
     } else #if OS == .LINUX {
         platform    :: "linux";
         static_lib  :: "a";
-        c_libraries :: string.["forbear.so", "forbear-javascript.so"];
-        libnode     :: string.["lib/libnode.so.137", "lib/libnode.so"];
+        c_libraries :: string.["forbear.so"];
     } else #if OS == .MACOS {
         platform    :: "darwin";
         static_lib  :: "a";
-        c_libraries :: string.["forbear.dylib", "forbear-javascript.dylib"];
-        libnode     :: string.["libnode.137.dylib"];
+        c_libraries :: string.["forbear.dylib"];
     }
 
     root  := #filepath;
@@ -39,11 +36,7 @@ release :: () {
     copy(tprint("%forbear.jai", src), tprint("%module.jai", jai));
     for string.["bindings-darwin.jai", "bindings-linux.jai", "bindings-win32.jai",
                 tprint("vendor/freetype-%.%", platform, static_lib),
-                tprint("vendor/kb_text_shape-%.%", platform, static_lib),
-                "adapters/javascript/javascript.jai",
-                tprint("adapters/javascript/javascript.%", static_lib),
-                "adapters/javascript/jsx.mjs",
-                "adapters/javascript/javascript.d.ts"] {
+                tprint("vendor/kb_text_shape-%.%", platform, static_lib)] {
         copy(tprint("%1%2", src, it), tprint("%1%2", jai, it));
     }
     copy(tprint("%LICENSE", root), tprint("%LICENSE", jai));
@@ -51,15 +44,10 @@ release :: () {
     c := tprint("%forbear-c-%/", stage, platform);
     for c_libraries copy(tprint("%c-api/%", src, it), tprint("%1%2", c, it));
     copy(tprint("%c-api/forbear.h", src), tprint("%forbear.h", c));
-    copy(tprint("%adapters/javascript/jsx.mjs", src), tprint("%jsx.mjs", c));
-    copy(tprint("%adapters/javascript/javascript.d.ts", src), tprint("%javascript.d.ts", c));
     copy(tprint("%LICENSE", root), tprint("%LICENSE", c));
 
-    node := tprint("%libnode-%/", stage, platform);
-    for libnode copy(tprint("%vendor/node/out/Release/%", src, it), tprint("%1%2", node, it));
-
     archives: [..]string;
-    for string.[jai, c, node] {
+    for string.[jai, c] {
         directory := slice(it, 0, it.count - 1);
         archive   := tprint("%.tar.gz", directory);
         run(stage, "tar", "-czf", archive, "-C", directory, ".");
@@ -72,7 +60,7 @@ release :: () {
 }
 
 copy :: (from: string, to: string) {
-    assert(file_exists(from), "% is missing. Run `jai generate.jai` in src first, and build vendor/node with --shared.", from);
+    assert(file_exists(from), "% is missing. Run `jai generate.jai` in src first.", from);
     make_directory_if_it_does_not_exist(path_strip_filename(to), recursive = true);
     assert(copy_file(from, to), "could not copy % to %", from, to);
 }
