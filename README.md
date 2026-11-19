@@ -119,6 +119,10 @@ The road map for the near future is:
 
 For more details, see [to-do.txt](./to-do.txt).
 
+## Feedback
+
+Bug reports and questions are welcome in [issues](https://github.com/gabrielmfern/forbear/issues) and [discussions](https://github.com/gabrielmfern/forbear/discussions).
+
 ---
 
 <picture>
