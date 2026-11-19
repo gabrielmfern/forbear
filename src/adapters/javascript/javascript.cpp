@@ -13,9 +13,11 @@
 #include <numbers>
 #undef OVERFLOW
 
-extern "C" void forbear_open(void* adapter, void* js_style_object, char* manual_key_data, int64_t manual_key_count);
-extern "C" void forbear_close(void* adapter);
+extern "C" void forbear_open_element(void* adapter, void* js_style_object, char* manual_key_data, int64_t manual_key_count);
+extern "C" void forbear_close_element(void* adapter);
 extern "C" void forbear_text(void* adapter, void* js_style_object, char* content_data, int64_t content_count, char* manual_key_data, int64_t manual_key_count);
+extern "C" void forbear_open_scope(void* adapter, char* key_data, int64_t key_count);
+extern "C" void forbear_close_scope(void* adapter);
 extern "C" bool forbear_on_key_down(void* adapter, uint32_t code_point);
 extern "C" bool forbear_on_click(void* adapter, uint8_t button);
 
@@ -733,7 +735,7 @@ void to_bottom_right(const v8::FunctionCallbackInfo<v8::Value>& info) {
     return_value.Set(vector2);
 }
 
-void js_open(const v8::FunctionCallbackInfo<v8::Value>& info) {
+void js_open_element(const v8::FunctionCallbackInfo<v8::Value>& info) {
     auto isolate = info.GetIsolate();
     auto runtime = static_cast<JavascriptRuntime*>(
         v8::External::Cast(*info.Data())->Value()
@@ -746,7 +748,7 @@ void js_open(const v8::FunctionCallbackInfo<v8::Value>& info) {
             manual_key = info[1];
         } else if (info.Length() >= 2 && !info[1]->IsNullOrUndefined()) {
             isolate->ThrowException(v8::Exception::TypeError(
-                v8::String::NewFromUtf8Literal(isolate, "open expects a string for the manual key")
+                v8::String::NewFromUtf8Literal(isolate, "openElement expects a string for the manual key")
             ));
             return;
         }
@@ -757,19 +759,19 @@ void js_open(const v8::FunctionCallbackInfo<v8::Value>& info) {
         style = v8::Object::New(isolate);
     } else {
         isolate->ThrowException(v8::Exception::TypeError(
-            v8::String::NewFromUtf8Literal(isolate, "open expects a Style object, a string key, or no arguments")
+            v8::String::NewFromUtf8Literal(isolate, "openElement expects a Style object, a string key, or no arguments")
         ));
         return;
     }
     v8::String::Utf8Value key(isolate, manual_key);
-    forbear_open(runtime->adapter, &style, *key, key.length());
+    forbear_open_element(runtime->adapter, &style, *key, key.length());
 }
 
-void js_close(const v8::FunctionCallbackInfo<v8::Value>& info) {
+void js_close_element(const v8::FunctionCallbackInfo<v8::Value>& info) {
     auto runtime = static_cast<JavascriptRuntime*>(
         v8::External::Cast(*info.Data())->Value()
     );
-    forbear_close(runtime->adapter);
+    forbear_close_element(runtime->adapter);
 }
 
 void js_text(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -820,6 +822,28 @@ void js_text(const v8::FunctionCallbackInfo<v8::Value>& info) {
     v8::String::Utf8Value content_utf8(isolate, content);
     v8::String::Utf8Value key(isolate, manual_key);
     forbear_text(runtime->adapter, &style, *content_utf8, content_utf8.length(), *key, key.length());
+}
+
+void js_open_scope(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto isolate = info.GetIsolate();
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    if (info.Length() < 1 || !info[0]->IsString()) {
+        isolate->ThrowException(v8::Exception::TypeError(
+            v8::String::NewFromUtf8Literal(isolate, "openScope expects a string key")
+        ));
+        return;
+    }
+    v8::String::Utf8Value key(isolate, info[0]);
+    forbear_open_scope(runtime->adapter, *key, key.length());
+}
+
+void js_close_scope(const v8::FunctionCallbackInfo<v8::Value>& info) {
+    auto runtime = static_cast<JavascriptRuntime*>(
+        v8::External::Cast(*info.Data())->Value()
+    );
+    forbear_close_scope(runtime->adapter);
 }
 
 void on_key_down(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -963,9 +987,11 @@ extern "C" void* javascript_init(
             define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toTopRight"), to_top_right);
             define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toBottomLeft"), to_bottom_left);
             define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "toBottomRight"), to_bottom_right);
-            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "open"), js_open);
-            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "close"), js_close);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "openElement"), js_open_element);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "closeElement"), js_close_element);
             define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "text"), js_text);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "openScope"), js_open_scope);
+            define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "closeScope"), js_close_scope);
             define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "onKeyDown"), on_key_down);
             define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "onClick"), on_click);
             define_global_function(runtime, v8::String::NewFromUtf8Literal(isolate, "setRenderFunction"), set_render_function);

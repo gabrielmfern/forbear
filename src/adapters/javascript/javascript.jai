@@ -444,10 +444,10 @@ style_from :: (adapter: *Javascript_Adapter, js_style_object: *void) -> Style {
 }
 
 #program_export
-forbear_open :: (adapter:          *Javascript_Adapter,
-                 js_style_object:  *void,
-                 manual_key_data:  *u8,
-                 manual_key_count: s64) #c_call {
+forbear_open_element :: (adapter:          *Javascript_Adapter,
+                         js_style_object:  *void,
+                         manual_key_data:  *u8,
+                         manual_key_count: s64) #c_call {
     push_context adapter.frame_context {
         key: u64;
         key = fnv1a_hash(manual_key_data, manual_key_count);
@@ -460,7 +460,7 @@ forbear_open :: (adapter:          *Javascript_Adapter,
 }
 
 #program_export
-forbear_close :: (adapter: *Javascript_Adapter) #c_call {
+forbear_close_element :: (adapter: *Javascript_Adapter) #c_call {
     push_context adapter.frame_context {
         opening := pop(*adapter.openings_stack);
         close_element(opening);
@@ -486,6 +486,22 @@ forbear_text :: (adapter:          *Javascript_Adapter,
 
         text(style, content, key_hash);
     }
+}
+
+#program_export
+forbear_open_scope :: (adapter: *Javascript_Adapter, key_data: *u8, key_count: s64) #c_call {
+    push_context adapter.frame_context {
+        key := fnv1a_hash(key_data, key_count);
+        if context.forbear.scope_key != U64_MAX {
+            key = fnv1a_hash(context.forbear.scope_key, key);
+        }
+        array_add(*adapter.openings_stack, open_scope(key));
+    }
+}
+
+#program_export
+forbear_close_scope :: (adapter: *Javascript_Adapter) #c_call {
+    push_context adapter.frame_context { close_scope(pop(*adapter.openings_stack), 0); }
 }
 
 #program_export

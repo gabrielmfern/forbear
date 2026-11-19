@@ -72,11 +72,13 @@ interface Style {
     direction?: Direction;
 }
 
-declare function open(style?: Style, manualKey?: string): void;
-declare function open(manualKey?: string): void;
-declare function close(): void;
+declare function openElement(style?: Style, manualKey?: string): void;
+declare function openElement(manualKey?: string): void;
+declare function closeElement(): void;
 declare function text(style: Style, content: unknown, manualKey?: string): void;
 declare function text(content: unknown, manualKey?: string): void;
+declare function openScope(key: string): void;
+declare function closeScope(): void;
 
 declare namespace JSX {
   interface IntrinsicElements {

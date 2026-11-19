@@ -67,16 +67,18 @@ function transformer(ctx) {
     function jsxToCalls(node) {
         const calls = [];
         let children;
+        let component = false;
         if (ts.isJsxFragment(node)) {
             children = node.children;
         } else {
             const openEl = ts.isJsxElement(node) ? node.openingElement : node;
             const tag = openEl.tagName;
-            if (!ts.isIdentifier(tag) || tag.text !== "element") {
+            if (!ts.isIdentifier(tag)) {
                 const src = tag.getSourceFile();
                 const { line, character } = src.getLineAndCharacterOfPosition(tag.getStart());
-                throw new Error(`${src.fileName}:${line + 1}:${character + 1}: JSX host tag must be element`);
+                throw new Error(`${src.fileName}:${line + 1}:${character + 1}: JSX tag must be element or a component name`);
             }
+            component = tag.text !== "element";
 
             const src = openEl.getSourceFile();
             const { line, character } =
@@ -116,11 +118,20 @@ function transformer(ctx) {
                 properties.push(factory.createPropertyAssignment(factory.createIdentifier(name.text), value));
             }
 
-            const args = [];
-            if (properties.length) args.push(factory.createObjectLiteralExpression(properties, true));
-            if (key) args.push(key);
-            calls.push(factory.createCallExpression(factory.createIdentifier("open"), undefined, args));
-            if (ts.isJsxElement(node)) children = node.children;
+            if (component) {
+                if (ts.isJsxElement(node) && node.children.some((child) => !ts.isJsxText(child) || !child.containsOnlyTriviaWhiteSpaces)) {
+                    const { line, character } = src.getLineAndCharacterOfPosition(openEl.getStart());
+                    throw new Error(`${src.fileName}:${line + 1}:${character + 1}: components can't have children yet`);
+                }
+                calls.push(factory.createCallExpression(factory.createIdentifier("openScope"), undefined, [key]));
+                calls.push(factory.createCallExpression(factory.createIdentifier(tag.text), undefined, [factory.createObjectLiteralExpression(properties, true)]));
+            } else {
+                const args = [];
+                if (properties.length) args.push(factory.createObjectLiteralExpression(properties, true));
+                if (key) args.push(key);
+                calls.push(factory.createCallExpression(factory.createIdentifier("openElement"), undefined, args));
+                if (ts.isJsxElement(node)) children = node.children;
+            }
         }
 
         if (children) {
@@ -161,7 +172,7 @@ function transformer(ctx) {
         }
 
         if (!ts.isJsxFragment(node)) {
-            calls.push(factory.createCallExpression(factory.createIdentifier("close"), undefined, []));
+            calls.push(factory.createCallExpression(factory.createIdentifier(component ? "closeScope" : "closeElement"), undefined, []));
         }
         return calls;
     }
