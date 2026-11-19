@@ -35,24 +35,23 @@ release :: () {
     _, changes := run_command("git", "status", "--porcelain", working_directory = root, capture_and_return_output = true);
     assert(changes == "", "The release is named after commit %, but these changes are not in it. Commit or stash them first:\n%", tag, changes);
 
-    src   := join(root, "modules/forbear/");
     stage := join(root, ".build/release/");
     if is_directory(stage) delete_directory(stage);
 
-    run(join(src, "c-api"), compiler, "build.jai", "-", "no_javascript");
+    run(join(root, "c-api"), compiler, "build.jai", "-", "no_javascript");
 
     jai := tprint("%forbear-jai-%/", stage, platform);
-    copy(join(src, "module.jai"), join(jai, "module.jai"));
+    copy(join(root, "forbear.jai"), join(jai, "module.jai"));
     for string.["bindings-darwin.jai", "bindings-linux.jai", "bindings-win32.jai",
                 tprint("vendor/freetype-%.%", platform, static_lib),
                 tprint("vendor/kb_text_shape-%.%", platform, static_lib)] {
-        copy(join(src, it), join(jai, it));
+        copy(join(root, it), join(jai, it));
     }
     copy(join(root, "LICENSE"), join(jai, "LICENSE"));
 
     c := tprint("%forbear-c-%/", stage, platform);
-    for c_libraries copy(tprint("%c-api/%", src, it), join(c, it));
-    copy(join(src, "c-api/forbear.h"), join(c, "forbear.h"));
+    for c_libraries copy(tprint("%c-api/%", root, it), join(c, it));
+    copy(join(root, "c-api/forbear.h"), join(c, "forbear.h"));
     copy(join(root, "LICENSE"), join(c, "LICENSE"));
 
     exists := run_command("gh", "release", "view", tag, working_directory = root).exit_code == 0;
@@ -78,7 +77,7 @@ release :: () {
 }
 
 copy :: (from: string, to: string) {
-    assert(file_exists(from), "% is missing. Run `jai generate.jai` in modules/forbear first.", from);
+    assert(file_exists(from), "% is missing. Run `jai generate.jai` first.", from);
     make_directory_if_it_does_not_exist(path_strip_filename(to), recursive = true);
     assert(copy_file(from, to), "could not copy % to %", from, to);
 }

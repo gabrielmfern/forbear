@@ -1,6 +1,6 @@
 MEMORY_DEBUGGING :: false;
 
-BUILD_FLAGS :: "+forbear";
+BUILD_FLAGS :: "-output_path .build +forbear";
 
 #import "Basic"()(MEMORY_DEBUGGER = MEMORY_DEBUGGING);
 #import "File";

@@ -1,4 +1,4 @@
-BUILD_FLAGS :: "+forbear";
+BUILD_FLAGS :: "-output_path .build +forbear";
 
 #import "Basic";
 #import "File";
