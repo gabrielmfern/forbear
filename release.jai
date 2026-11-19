@@ -39,7 +39,7 @@ release :: () {
     stage := join(root, ".build/release/");
     if is_directory(stage) delete_directory(stage);
 
-    run(join(src, "c-api"), compiler, "build.jai");
+    run(join(src, "c-api"), compiler, "build.jai", "-", "no_javascript");
 
     jai := tprint("%forbear-jai-%/", stage, platform);
     copy(join(src, "module.jai"), join(jai, "module.jai"));

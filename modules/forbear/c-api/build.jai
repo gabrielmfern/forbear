@@ -32,9 +32,12 @@ build :: () {
         .{os = OS,       cpu = CPU,    javascript = true},
     ];
 
+    skip_javascript := array_find(get_build_options().compile_time_command_line, "no_javascript");
+
     remaining := 0;
     for * targets {
         if it.os == .MACOS && OS != .MACOS continue;
+        if it.javascript && skip_javascript continue;
         remaining += 1;
 
         it.workspace       = compiler_create_workspace(tprint("%1%2", it.os, ifx it.javascript then " JAVASCRIPT"));
