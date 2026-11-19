@@ -20,10 +20,10 @@ if [ "$language" = jai ]; then main=main.jai; forbear=modules/forbear; else main
 
 mkdir -p "$dir/$forbear"
 cd "$dir"
-curl -fsSL --create-dirs -o "$main" "$base/quick-start/$language/$main" -o Inter.ttf "$base/Inter.ttf"
+curl -fsSL --create-dirs -o "$main" "$base/www/quick-start/$language/$main" -o Inter.ttf "$base/Inter.ttf"
 curl -fsSL "$release/forbear-$language-$os.tar.gz" | tar -xz -C "$forbear"
 if [ "$language" = c ]; then
-  curl -fsSL -o build.sh "$base/quick-start/c/build.sh"
+  curl -fsSL -o build.sh "$base/www/quick-start/c/build.sh"
   chmod +x build.sh
 fi
 

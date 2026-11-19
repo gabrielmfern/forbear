@@ -22,7 +22,7 @@ dist
 ## binaries
 /playground
 /tests
-quick-start/*/main
+www/quick-start/*/main
 
 # javascript
 node_modules

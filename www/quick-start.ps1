@@ -17,10 +17,10 @@ $main = if ($language -eq 'jai') { 'main.jai' } else { 'main.c' }
 $forbear = if ($language -eq 'jai') { 'modules/forbear' } else { 'forbear' }
 
 $files = [ordered]@{
-    $main = "quick-start/$language/$main"
+    $main = "www/quick-start/$language/$main"
     'Inter.ttf' = 'Inter.ttf'
 }
-if ($language -eq 'c') { $files['build.bat'] = 'quick-start/c/build.bat' }
+if ($language -eq 'c') { $files['build.bat'] = 'www/quick-start/c/build.bat' }
 
 foreach ($file in $files.GetEnumerator()) {
     $out = Join-Path $dir $file.Key
