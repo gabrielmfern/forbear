@@ -8312,8 +8312,9 @@ kbts_shape_error_enum :: enum u32 {
     KBTS_SHAPE_ERROR_INVALID_FONT                   :: 1;
     KBTS_SHAPE_ERROR_GAVE_TEXT_BEFORE_CALLING_BEGIN :: 2;
     KBTS_SHAPE_ERROR_OUT_OF_MEMORY                  :: 3;
+    KBTS_SHAPE_ERROR_GENERATED_TOO_MANY_GLYPHS      :: 4;
 
-    KBTS_SHAPE_ERROR_COUNT                          :: 4;
+    KBTS_SHAPE_ERROR_COUNT                          :: 5;
 }
 
 kbts_allocator_op_kind :: u32;
@@ -8564,6 +8565,7 @@ kbts_unicode_flag_enum :: enum u32 {
     KBTS_UNICODE_FLAG_PART_OF_WORD            :: 16;
     KBTS_UNICODE_FLAG_DECIMAL_DIGIT           :: 32;
     KBTS_UNICODE_FLAG_NON_SPACING_MARK        :: 64;
+    KBTS_UNICODE_FLAG_RECOMPOSITION_RHS       :: 128;
 
     KBTS_UNICODE_FLAG_MIRRORED                :: 12;
 }
@@ -9592,9 +9594,6 @@ kbts_glyph :: struct {
 
     Config:                        *kbts_glyph_config;
 
-    // @Memory: We definitely don't need to carry this around for the entire shaping process.
-    Decomposition:                 u64;
-
     Classes:                       kbts_glyph_classes;
 
     Flags:                         kbts_glyph_flags;
@@ -9852,7 +9851,7 @@ kbts_PlaceShapeConfig2 :: (Font: *kbts_font, Script: kbts_script, Language: kbts
 kbts_PlaceShapeConfig :: (Font: *kbts_font, Script: kbts_script, Language: kbts_language, Memory: *void) -> *kbts_shape_config #foreign kb_text_shape;
 kbts_CreateShapeConfig2 :: (Font: *kbts_font, Script: kbts_script, Language: kbts_language, VariationVector: *float, Allocator: kbts_allocator_function, AllocatorData: *void, Uid: *kbts_uid) -> *kbts_shape_config #foreign kb_text_shape;
 kbts_CreateShapeConfig :: (Font: *kbts_font, Script: kbts_script, Language: kbts_language, Allocator: kbts_allocator_function, AllocatorData: *void) -> *kbts_shape_config #foreign kb_text_shape;
-
+kbts_ShapeConfigUid :: (Config: *kbts_shape_config, Uid: *kbts_uid) -> void #foreign kb_text_shape;
 kbts_DestroyShapeConfig :: (Config: *kbts_shape_config) -> void #foreign kb_text_shape;
 
 // A glyph_storage holds and recycles glyph data.
@@ -10107,6 +10106,31 @@ T1_MAX_MM_DESIGNS :: 16;
 T1_MAX_MM_MAP_POINTS :: 20;
 
 FT_VAR_AXIS_FLAG_HIDDEN :: 1;
+
+FT_MODULE_FONT_DRIVER :: 1;
+FT_MODULE_RENDERER :: 2;
+FT_MODULE_HINTER :: 4;
+FT_MODULE_STYLER :: 8;
+
+FT_MODULE_DRIVER_SCALABLE :: 0x100;
+
+FT_MODULE_DRIVER_NO_OUTLINES :: 0x200;
+
+FT_MODULE_DRIVER_HAS_HINTER :: 0x400;
+
+FT_MODULE_DRIVER_HINTS_LIGHTLY :: 0x800;
+
+ft_module_font_driver :: FT_MODULE_FONT_DRIVER;
+ft_module_renderer :: FT_MODULE_RENDERER;
+ft_module_hinter :: FT_MODULE_HINTER;
+ft_module_styler :: FT_MODULE_STYLER;
+
+ft_module_driver_scalable :: FT_MODULE_DRIVER_SCALABLE;
+ft_module_driver_no_outlines :: FT_MODULE_DRIVER_NO_OUTLINES;
+ft_module_driver_has_hinter :: FT_MODULE_DRIVER_HAS_HINTER;
+ft_module_driver_hints_lightly :: FT_MODULE_DRIVER_HINTS_LIGHTLY;
+
+FT_DEBUG_HOOK_TRUETYPE :: 0;
 
 /**************************************************************************
 *
@@ -17399,7 +17423,6 @@ FT_Get_Multi_Master :: (face: FT_Face, amaster: *FT_Multi_Master) -> FT_Error #f
 *   FreeType error code.  0~means success.
 */
 FT_Get_MM_Var :: (face: FT_Face, amaster: **FT_MM_Var) -> FT_Error #foreign freetype;
-FT_Property_Set :: (library: FT_Library, module_name: *FT_String, property_name: *FT_String, value: *void) -> FT_Error #foreign freetype;
 
 /**************************************************************************
 *
@@ -17828,6 +17851,635 @@ FT_Set_Named_Instance :: (face: FT_Face, instance_index: FT_UInt) -> FT_Error #f
 *   2.13.1
 */
 FT_Get_Default_Named_Instance :: (face: FT_Face, instance_index: *FT_UInt) -> FT_Error #foreign freetype;
+
+FT_Module_Interface :: FT_Pointer;
+
+/**************************************************************************
+*
+* @functype:
+*   FT_Module_Constructor
+*
+* @description:
+*   A function used to initialize (not create) a new module object.
+*
+* @input:
+*   module ::
+*     The module to initialize.
+*/
+FT_Module_Constructor :: #type (module: FT_Module) -> FT_Error #c_call;
+
+/**************************************************************************
+*
+* @functype:
+*   FT_Module_Destructor
+*
+* @description:
+*   A function used to finalize (not destroy) a given module object.
+*
+* @input:
+*   module ::
+*     The module to finalize.
+*/
+FT_Module_Destructor :: #type (module: FT_Module) -> void #c_call;
+
+/**************************************************************************
+*
+* @functype:
+*   FT_Module_Requester
+*
+* @description:
+*   A function used to query a given module for a specific interface.
+*
+* @input:
+*   module ::
+*     The module to be searched.
+*
+*   name ::
+*     The name of the interface in the module.
+*/
+FT_Module_Requester :: #type (module: FT_Module, name: *u8) -> FT_Module_Interface #c_call;
+
+/**************************************************************************
+*
+* @struct:
+*   FT_Module_Class
+*
+* @description:
+*   The module class descriptor.  While being a public structure necessary
+*   for FreeType's module bookkeeping, most of the fields are essentially
+*   internal, not to be used directly by an application.
+*
+* @fields:
+*   module_flags ::
+*     Bit flags describing the module.
+*
+*   module_size ::
+*     The size of one module object/instance in bytes.
+*
+*   module_name ::
+*     The name of the module.
+*
+*   module_version ::
+*     The version, as a 16.16 fixed number (major.minor).
+*
+*   module_requires ::
+*     The version of FreeType this module requires, as a 16.16 fixed
+*     number (major.minor).  Starts at version 2.0, i.e., 0x20000.
+*
+*   module_interface ::
+*     A typeless pointer to a structure (which varies between different
+*     modules) that holds the module's interface functions.  This is
+*     essentially what `get_interface` returns.
+*
+*   module_init ::
+*     The initializing function.
+*
+*   module_done ::
+*     The finalizing function.
+*
+*   get_interface ::
+*     The interface requesting function.
+*/
+FT_Module_Class_ :: struct {
+    module_flags:     FT_ULong;
+    module_size:      FT_Long;
+    module_name:      *FT_String;
+    module_version:   FT_Fixed;
+    module_requires:  FT_Fixed;
+
+    module_interface: *void;
+
+    module_init:      FT_Module_Constructor;
+    module_done:      FT_Module_Destructor;
+    get_interface:    FT_Module_Requester;
+}
+
+/**************************************************************************
+*
+* @struct:
+*   FT_Module_Class
+*
+* @description:
+*   The module class descriptor.  While being a public structure necessary
+*   for FreeType's module bookkeeping, most of the fields are essentially
+*   internal, not to be used directly by an application.
+*
+* @fields:
+*   module_flags ::
+*     Bit flags describing the module.
+*
+*   module_size ::
+*     The size of one module object/instance in bytes.
+*
+*   module_name ::
+*     The name of the module.
+*
+*   module_version ::
+*     The version, as a 16.16 fixed number (major.minor).
+*
+*   module_requires ::
+*     The version of FreeType this module requires, as a 16.16 fixed
+*     number (major.minor).  Starts at version 2.0, i.e., 0x20000.
+*
+*   module_interface ::
+*     A typeless pointer to a structure (which varies between different
+*     modules) that holds the module's interface functions.  This is
+*     essentially what `get_interface` returns.
+*
+*   module_init ::
+*     The initializing function.
+*
+*   module_done ::
+*     The finalizing function.
+*
+*   get_interface ::
+*     The interface requesting function.
+*/
+FT_Module_Class :: FT_Module_Class_;
+
+/**************************************************************************
+*
+* @function:
+*   FT_Add_Module
+*
+* @description:
+*   Add a new module to a given library instance.
+*
+* @inout:
+*   library ::
+*     A handle to the library object.
+*
+* @input:
+*   clazz ::
+*     A pointer to class descriptor for the module.
+*
+* @return:
+*   FreeType error code.  0~means success.
+*
+* @note:
+*   An error will be returned if a module already exists by that name, or
+*   if the module requires a version of FreeType that is too great.
+*/
+FT_Add_Module :: (library: FT_Library, clazz: *FT_Module_Class) -> FT_Error #foreign freetype;
+
+/**************************************************************************
+*
+* @function:
+*   FT_Get_Module
+*
+* @description:
+*   Find a module by its name.
+*
+* @input:
+*   library ::
+*     A handle to the library object.
+*
+*   module_name ::
+*     The module's name (as an ASCII string).
+*
+* @return:
+*   A module handle.  0~if none was found.
+*
+* @note:
+*   FreeType's internal modules aren't documented very well, and you
+*   should look up the source code for details.
+*/
+FT_Get_Module :: (library: FT_Library, module_name: *u8) -> FT_Module #foreign freetype;
+
+/**************************************************************************
+*
+* @function:
+*   FT_Remove_Module
+*
+* @description:
+*   Remove a given module from a library instance.
+*
+* @inout:
+*   library ::
+*     A handle to a library object.
+*
+* @input:
+*   module ::
+*     A handle to a module object.
+*
+* @return:
+*   FreeType error code.  0~means success.
+*
+* @note:
+*   The module object is destroyed by the function in case of success.
+*/
+FT_Remove_Module :: (library: FT_Library, module: FT_Module) -> FT_Error #foreign freetype;
+
+/**************************************************************************
+*
+* @function:
+*    FT_Property_Set
+*
+* @description:
+*    Set a property for a given module.
+*
+* @input:
+*    library ::
+*      A handle to the library the module is part of.
+*
+*    module_name ::
+*      The module name.
+*
+*    property_name ::
+*      The property name.  Properties are described in section
+*      @properties.
+*
+*      Note that only a few modules have properties.
+*
+*    value ::
+*      A generic pointer to a variable or structure that gives the new
+*      value of the property.  The exact definition of `value` is
+*      dependent on the property; see section @properties.
+*
+* @return:
+*   FreeType error code.  0~means success.
+*
+* @note:
+*    If `module_name` isn't a valid module name, or `property_name`
+*    doesn't specify a valid property, or if `value` doesn't represent a
+*    valid value for the given property, an error is returned.
+*
+*    The following example sets property 'bar' (a simple integer) in
+*    module 'foo' to value~1.
+*
+*    ```
+*      FT_UInt  bar;
+*
+*
+*      bar = 1;
+*      FT_Property_Set( library, "foo", "bar", &bar );
+*    ```
+*
+*    Note that the FreeType Cache sub-system doesn't recognize module
+*    property changes.  To avoid glyph lookup confusion within the cache
+*    you should call @FTC_Manager_Reset to completely flush the cache if a
+*    module property gets changed after @FTC_Manager_New has been called.
+*
+*    It is not possible to set properties of the FreeType Cache sub-system
+*    itself with FT_Property_Set; use @FTC_Property_Set instead.
+*
+* @since:
+*   2.4.11
+*
+*/
+FT_Property_Set :: (library: FT_Library, module_name: *FT_String, property_name: *FT_String, value: *void) -> FT_Error #foreign freetype;
+
+/**************************************************************************
+*
+* @function:
+*    FT_Property_Get
+*
+* @description:
+*    Get a module's property value.
+*
+* @input:
+*    library ::
+*      A handle to the library the module is part of.
+*
+*    module_name ::
+*      The module name.
+*
+*    property_name ::
+*      The property name.  Properties are described in section
+*      @properties.
+*
+* @inout:
+*    value ::
+*      A generic pointer to a variable or structure that gives the value
+*      of the property.  The exact definition of `value` is dependent on
+*      the property; see section @properties.
+*
+* @return:
+*   FreeType error code.  0~means success.
+*
+* @note:
+*    If `module_name` isn't a valid module name, or `property_name`
+*    doesn't specify a valid property, or if `value` doesn't represent a
+*    valid value for the given property, an error is returned.
+*
+*    The following example gets property 'baz' (a range) in module 'foo'.
+*
+*    ```
+*      typedef  range_
+*      {
+*        FT_Int32  min;
+*        FT_Int32  max;
+*
+*      } range;
+*
+*      range  baz;
+*
+*
+*      FT_Property_Get( library, "foo", "baz", &baz );
+*    ```
+*
+*    It is not possible to retrieve properties of the FreeType Cache
+*    sub-system with FT_Property_Get; use @FTC_Property_Get instead.
+*
+* @since:
+*   2.4.11
+*
+*/
+FT_Property_Get :: (library: FT_Library, module_name: *FT_String, property_name: *FT_String, value: *void) -> FT_Error #foreign freetype;
+
+/**************************************************************************
+*
+* @function:
+*   FT_Set_Default_Properties
+*
+* @description:
+*   If compilation option `FT_CONFIG_OPTION_ENVIRONMENT_PROPERTIES` is
+*   set, this function reads the `FREETYPE_PROPERTIES` environment
+*   variable to control driver properties.  See section @properties for
+*   more.
+*
+*   If the compilation option is not set, this function does nothing.
+*
+*   `FREETYPE_PROPERTIES` has the following syntax form (broken here into
+*   multiple lines for better readability).
+*
+*   ```
+*     <optional whitespace>
+*     <module-name1> ':'
+*     <property-name1> '=' <property-value1>
+*     <whitespace>
+*     <module-name2> ':'
+*     <property-name2> '=' <property-value2>
+*     ...
+*   ```
+*
+*   Example:
+*
+*   ```
+*     FREETYPE_PROPERTIES=truetype:interpreter-version=35 \
+*                         cff:no-stem-darkening=0
+*   ```
+*
+* @inout:
+*   library ::
+*     A handle to a new library object.
+*
+* @since:
+*   2.8
+*/
+FT_Set_Default_Properties :: (library: FT_Library) -> void #foreign freetype;
+
+/**************************************************************************
+*
+* @function:
+*   FT_Reference_Library
+*
+* @description:
+*   A counter gets initialized to~1 at the time an @FT_Library structure
+*   is created.  This function increments the counter.  @FT_Done_Library
+*   then only destroys a library if the counter is~1, otherwise it simply
+*   decrements the counter.
+*
+*   This function helps in managing life-cycles of structures that
+*   reference @FT_Library objects.
+*
+* @input:
+*   library ::
+*     A handle to a target library object.
+*
+* @return:
+*   FreeType error code.  0~means success.
+*
+* @since:
+*   2.4.2
+*/
+FT_Reference_Library :: (library: FT_Library) -> FT_Error #foreign freetype;
+
+/**************************************************************************
+*
+* @function:
+*   FT_New_Library
+*
+* @description:
+*   This function is used to create a new FreeType library instance from a
+*   given memory object.  It is thus possible to use libraries with
+*   distinct memory allocators within the same program.  Note, however,
+*   that the used @FT_Memory structure is expected to remain valid for the
+*   life of the @FT_Library object.
+*
+*   Normally, you would call this function (followed by a call to
+*   @FT_Add_Default_Modules or a series of calls to @FT_Add_Module, and a
+*   call to @FT_Set_Default_Properties) instead of @FT_Init_FreeType to
+*   initialize the FreeType library.
+*
+*   Don't use @FT_Done_FreeType but @FT_Done_Library to destroy a library
+*   instance.
+*
+* @input:
+*   memory ::
+*     A handle to the original memory object.
+*
+* @output:
+*   alibrary ::
+*     A pointer to handle of a new library object.
+*
+* @return:
+*   FreeType error code.  0~means success.
+*
+* @note:
+*   See the discussion of reference counters in the description of
+*   @FT_Reference_Library.
+*/
+FT_New_Library :: (memory: FT_Memory, alibrary: *FT_Library) -> FT_Error #foreign freetype;
+
+/**************************************************************************
+*
+* @function:
+*   FT_Done_Library
+*
+* @description:
+*   Discard a given library object.  This closes all drivers and discards
+*   all resource objects.
+*
+* @input:
+*   library ::
+*     A handle to the target library.
+*
+* @return:
+*   FreeType error code.  0~means success.
+*
+* @note:
+*   See the discussion of reference counters in the description of
+*   @FT_Reference_Library.
+*/
+FT_Done_Library :: (library: FT_Library) -> FT_Error #foreign freetype;
+
+/**************************************************************************
+*
+* @functype:
+*   FT_DebugHook_Func
+*
+* @description:
+*   A drop-in replacement (or rather a wrapper) for the bytecode or
+*   charstring interpreter's main loop function.
+*
+*   Its job is essentially
+*
+*   - to activate debug mode to enforce single-stepping,
+*
+*   - to call the main loop function to interpret the next opcode, and
+*
+*   - to show the changed context to the user.
+*
+*   An example for such a main loop function is `TT_RunIns` (declared in
+*   FreeType's internal header file `src/truetype/ttinterp.h`).
+*
+*   Have a look at the source code of the `ttdebug` FreeType demo program
+*   for an example of a drop-in replacement.
+*
+* @inout:
+*   arg ::
+*     A typeless pointer, to be cast to the main loop function's data
+*     structure (which depends on the font module).  For TrueType fonts
+*     it is bytecode interpreter's execution context, `TT_ExecContext`,
+*     which is declared in FreeType's internal header file `tttypes.h`.
+*/
+FT_DebugHook_Func :: #type (arg: *void) -> FT_Error #c_call;
+
+/**************************************************************************
+*
+* @function:
+*   FT_Set_Debug_Hook
+*
+* @description:
+*   Set a debug hook function for debugging the interpreter of a font
+*   format.
+*
+*   While this is a public API function, an application needs access to
+*   FreeType's internal header files to do something useful.
+*
+*   Have a look at the source code of the `ttdebug` FreeType demo program
+*   for an example of its usage.
+*
+* @inout:
+*   library ::
+*     A handle to the library object.
+*
+* @input:
+*   hook_index ::
+*     The index of the debug hook.  You should use defined enumeration
+*     macros like @FT_DEBUG_HOOK_TRUETYPE.
+*
+*   debug_hook ::
+*     The function used to debug the interpreter.
+*
+* @note:
+*   Currently, four debug hook slots are available, but only one (for the
+*   TrueType interpreter) is defined.
+*/
+FT_Set_Debug_Hook :: (library: FT_Library, hook_index: FT_UInt, debug_hook: FT_DebugHook_Func) -> void #foreign freetype;
+
+/**************************************************************************
+*
+* @function:
+*   FT_Add_Default_Modules
+*
+* @description:
+*   Add the set of default drivers to a given library object.  This is
+*   only useful when you create a library object with @FT_New_Library
+*   (usually to plug a custom memory manager).
+*
+* @inout:
+*   library ::
+*     A handle to a new library object.
+*/
+FT_Add_Default_Modules :: (library: FT_Library) -> void #foreign freetype;
+
+/**************************************************************************
+*
+* @enum:
+*    FT_TrueTypeEngineType
+*
+* @description:
+*    A list of values describing which kind of TrueType bytecode engine is
+*    implemented in a given FT_Library instance.  It is used by the
+*    @FT_Get_TrueType_Engine_Type function.
+*
+* @values:
+*    FT_TRUETYPE_ENGINE_TYPE_NONE ::
+*      The library doesn't implement any kind of bytecode interpreter.
+*
+*    FT_TRUETYPE_ENGINE_TYPE_UNPATENTED ::
+*      Deprecated and removed.
+*
+*    FT_TRUETYPE_ENGINE_TYPE_PATENTED ::
+*      The library implements a bytecode interpreter that covers the full
+*      instruction set of the TrueType virtual machine (this was governed
+*      by patents until May 2010, hence the name).
+*
+* @since:
+*    2.2
+*
+*/
+FT_TrueTypeEngineType_ :: enum u32 {
+    NONE       :: 0;
+    UNPATENTED :: 1;
+    PATENTED   :: 2;
+
+    FT_TRUETYPE_ENGINE_TYPE_NONE       :: NONE;
+    FT_TRUETYPE_ENGINE_TYPE_UNPATENTED :: UNPATENTED;
+    FT_TRUETYPE_ENGINE_TYPE_PATENTED   :: PATENTED;
+}
+
+/**************************************************************************
+*
+* @enum:
+*    FT_TrueTypeEngineType
+*
+* @description:
+*    A list of values describing which kind of TrueType bytecode engine is
+*    implemented in a given FT_Library instance.  It is used by the
+*    @FT_Get_TrueType_Engine_Type function.
+*
+* @values:
+*    FT_TRUETYPE_ENGINE_TYPE_NONE ::
+*      The library doesn't implement any kind of bytecode interpreter.
+*
+*    FT_TRUETYPE_ENGINE_TYPE_UNPATENTED ::
+*      Deprecated and removed.
+*
+*    FT_TRUETYPE_ENGINE_TYPE_PATENTED ::
+*      The library implements a bytecode interpreter that covers the full
+*      instruction set of the TrueType virtual machine (this was governed
+*      by patents until May 2010, hence the name).
+*
+* @since:
+*    2.2
+*
+*/
+FT_TrueTypeEngineType :: FT_TrueTypeEngineType_;
+
+/**************************************************************************
+*
+* @function:
+*    FT_Get_TrueType_Engine_Type
+*
+* @description:
+*    Return an @FT_TrueTypeEngineType value to indicate which level of the
+*    TrueType virtual machine a given library instance supports.
+*
+* @input:
+*    library ::
+*      A library instance.
+*
+* @return:
+*    A value indicating which level is supported.
+*
+* @since:
+*    2.2
+*
+*/
+FT_Get_TrueType_Engine_Type :: (library: FT_Library) -> FT_TrueTypeEngineType #foreign freetype;
 
 #scope_file
 
