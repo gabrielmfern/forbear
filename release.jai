@@ -26,36 +26,41 @@ release :: () {
     }
 
     root  := #filepath;
-    src   := tprint("%src/", root);
-    stage := tprint("%.build/release/", root);
+    src   := join(root, "%src/");
+    stage := join(root, "%.build/release/");
     if is_directory(stage) delete_directory(stage);
 
-    run(tprint("%c-api", src), "jai", "build.jai");
+    run(join(src, "c-api"), "jai", "build.jai");
 
     jai := tprint("%forbear-jai-%/", stage, platform);
-    copy(tprint("%forbear.jai", src), tprint("%module.jai", jai));
+    copy(join(src, "forbear.jai"), join(jai, "module.jai"));
     for string.["bindings-darwin.jai", "bindings-linux.jai", "bindings-win32.jai",
                 tprint("vendor/freetype-%.%", platform, static_lib),
                 tprint("vendor/kb_text_shape-%.%", platform, static_lib)] {
-        copy(tprint("%1%2", src, it), tprint("%1%2", jai, it));
+        copy(join(src, it), join(jai, it));
     }
-    copy(tprint("%LICENSE", root), tprint("%LICENSE", jai));
+    copy(join(root, "LICENSE"), join(root, "LICENSE"));
 
     c := tprint("%forbear-c-%/", stage, platform);
-    for c_libraries copy(tprint("%c-api/%", src, it), tprint("%1%2", c, it));
-    copy(tprint("%c-api/forbear.h", src), tprint("%forbear.h", c));
-    copy(tprint("%LICENSE", root), tprint("%LICENSE", c));
+    for c_libraries copy(tprint("%c-api/%", src, it), join(c, it));
+    copy(join(src, "c-api/forbear.h"), join(c, "forbear.h"));
+    copy(join(root, "LICENSE"), join(c, "LICENSE"));
 
     archives: [..]string;
     for string.[jai, c] {
         directory := slice(it, 0, it.count - 1);
-        archive   := tprint("%.tar.gz", directory);
+        archive   := join(directory, "%.tar.gz");
         run(stage, "tar", "-czf", archive, "-C", directory, ".");
         array_add(*archives, archive);
     }
 
     exists := run_command("gh", "release", "view", RELEASE_TAG, working_directory = root).exit_code == 0;
-    if !exists run(root, "gh", "release", "create", RELEASE_TAG, "--title", RELEASE_TAG, "--notes", "Prebuilt forbear files that the quick start downloads.");
+    if !exists run(root,
+                   "gh",
+                   "release",
+                   "create", RELEASE_TAG,
+                   "--title", RELEASE_TAG,
+                   "--notes", "Prebuilt forbear files that the quick start downloads.");
     run(root, "gh", "release", "upload", RELEASE_TAG, "--clobber", ..archives);
 }
 
