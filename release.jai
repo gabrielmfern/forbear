@@ -11,14 +11,17 @@ release :: () {
 
     #if OS == .WINDOWS {
         platform    :: "win32";
+        compiler    :: "jai";
         static_lib  :: "lib";
         c_libraries :: string.["forbear.dll", "forbear.lib"];
     } else #if OS == .LINUX {
         platform    :: "linux";
+        compiler    :: "jai-linux";
         static_lib  :: "a";
         c_libraries :: string.["forbear.so"];
     } else #if OS == .MACOS {
         platform    :: "darwin";
+        compiler    :: "jai-macos";
         static_lib  :: "a";
         c_libraries :: string.["forbear.dylib"];
     }
@@ -36,7 +39,7 @@ release :: () {
     stage := join(root, ".build/release/");
     if is_directory(stage) delete_directory(stage);
 
-    run(join(src, "c-api"), "jai", "build.jai");
+    run(join(src, "c-api"), compiler, "build.jai");
 
     jai := tprint("%forbear-jai-%/", stage, platform);
     copy(join(src, "module.jai"), join(jai, "module.jai"));
