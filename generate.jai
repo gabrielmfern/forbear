@@ -31,16 +31,17 @@ generate :: () {
     arch :: #ifx CPU == .ARM64 then "arm64" else "x64";
 
     BINDINGS_PATH :: #run join(#filepath, "bindings.jai");
-    BEGIN         :: #run tprint("// ====== BEGIN % BINDINGS ======\n", OS);
-    END           :: #run tprint("// ====== END % BINDINGS ======\n", OS);
+    BEGIN         :: #run tprint("// ====== BEGIN % BINDINGS ======", OS);
+    END           :: #run tprint("// ====== END % BINDINGS ======", OS);
 
     previous_bindings, success := read_entire_file(BINDINGS_PATH);
     assert(success, "could not read %", BINDINGS_PATH);
     begin := find_index_from_left(previous_bindings, BEGIN);
     end   := find_index_from_left(previous_bindings, END);
-    assert(begin != -1 && end != -1, "% is missing the lines\n%%", BINDINGS_PATH, BEGIN, END);
+    assert(begin != -1 && end != -1, "% is missing the lines\n%\n%", BINDINGS_PATH, BEGIN, END);
     bindings_builder: String_Builder;
     append(*bindings_builder, slice(previous_bindings, 0, begin + BEGIN.count));
+    append(*bindings_builder, "\n");
 
     #if OS == .LINUX {
         // egl bindings
