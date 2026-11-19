@@ -36,6 +36,7 @@
   h2 { @apply text-bright text-2xl font-bold mt-12 mb-4; }
   p { @apply my-4; }
   a { @apply text-yellow hover:text-bright-yellow; }
+  pre { @apply bg-float text-fg text-sm p-4 rounded-lg overflow-x-auto my-6; }
 }
 </style>
 <script>
@@ -68,6 +69,36 @@
 </div>
 </div>
 </div>
+
+<h2>Quick start</h2>
+
+<div id="quick-start" class="bg-float text-sm rounded-lg my-6">
+<div class="flex gap-4 px-4 pt-3">
+<div role="tablist" class="flex gap-4">
+<button role="tab" data-tab="unix" aria-controls="quick-start-unix" aria-selected="true" class="text-muted hover:text-fg aria-selected:text-bright cursor-pointer">Linux &amp; macOS</button>
+<button role="tab" data-tab="windows" aria-controls="quick-start-windows" aria-selected="false" class="text-muted hover:text-fg aria-selected:text-bright cursor-pointer">Windows</button>
+</div>
+<button id="quick-start-copy" class="ml-auto text-muted hover:text-fg cursor-pointer">copy</button>
+</div>
+<pre id="quick-start-unix" role="tabpanel" class="my-0"><code>curl -fsSL https://forbear.dev/quick-start.sh | sh</code></pre>
+<pre id="quick-start-windows" role="tabpanel" hidden class="my-0"><code>irm https://forbear.dev/quick-start.ps1 | iex</code></pre>
+</div>
+<script>
+  const quickStartTabs = document.querySelectorAll('#quick-start [role=tab]');
+  function showQuickStart(name) {
+    for (const tab of quickStartTabs) {
+      tab.setAttribute('aria-selected', tab.dataset.tab === name);
+      document.getElementById(tab.getAttribute('aria-controls')).hidden = tab.dataset.tab !== name;
+    }
+  }
+  for (const tab of quickStartTabs) tab.onclick = () => showQuickStart(tab.dataset.tab);
+  if (/^win/i.test(navigator.userAgentData?.platform ?? navigator.platform)) showQuickStart('windows');
+  document.getElementById('quick-start-copy').onclick = async (event) => {
+    await navigator.clipboard.writeText(document.querySelector('#quick-start [role=tabpanel]:not([hidden])').textContent);
+    event.target.textContent = 'copied';
+    setTimeout(() => event.target.textContent = 'copy', 1500);
+  };
+</script>
 
 <h2>forbear log</h2>
 
