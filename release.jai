@@ -5,8 +5,6 @@
 #import "Process";
 #import "String";
 
-RELEASE_TAG :: "snapshot";
-
 #run release();
 release :: () {
     set_build_options_dc(.{do_output = false});
@@ -26,6 +24,14 @@ release :: () {
     }
 
     root  := #filepath;
+
+    revision, commit := run_command("git", "rev-parse", "HEAD", working_directory = root, capture_and_return_output = true);
+    assert(revision.type == .EXITED && revision.exit_code == 0, "git rev-parse HEAD failed");
+    commit = trim(commit);
+    tag   := slice(commit, 0, 7);
+    _, changes := run_command("git", "status", "--porcelain", working_directory = root, capture_and_return_output = true);
+    assert(changes == "", "The release is named after commit %, but these changes are not in it. Commit or stash them first:\n%", tag, changes);
+
     src   := join(root, "modules/forbear/");
     stage := join(root, ".build/release/");
     if is_directory(stage) delete_directory(stage);
@@ -46,18 +52,19 @@ release :: () {
     copy(join(src, "c-api/forbear.h"), join(c, "forbear.h"));
     copy(join(root, "LICENSE"), join(c, "LICENSE"));
 
-    exists := run_command("gh", "release", "view", RELEASE_TAG, working_directory = root).exit_code == 0;
+    exists := run_command("gh", "release", "view", tag, working_directory = root).exit_code == 0;
     if !exists {
         run(root,
             "gh",
             "release",
-            "create", RELEASE_TAG,
-            "--title", RELEASE_TAG,
-            "--notes", "Prebuilt forbear files that the quick start downloads.");
+            "create", tag,
+            "--target", commit,
+            "--title", tag,
+            "--latest");
     }
 
     upload_command_arguments: [..]string;
-    array_add(*upload_command_arguments, "gh", "release", "upload", RELEASE_TAG, "--clobber");
+    array_add(*upload_command_arguments, "gh", "release", "upload", tag, "--clobber");
     for string.[jai, c] {
         directory := slice(it, 0, it.count - 1);
         archive   := join(directory, ".tar.gz");

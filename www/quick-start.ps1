@@ -11,7 +11,7 @@ if ($language -notin $languages) { throw "Unknown language '$language', expected
 
 $ref = if ($env:FORBEAR_REF) { $env:FORBEAR_REF } else { 'main' }
 $base = "https://raw.githubusercontent.com/gabrielmfern/forbear/$ref"
-$release = 'https://github.com/gabrielmfern/forbear/releases/download/snapshot'
+$release = 'https://github.com/gabrielmfern/forbear/releases/latest/download'
 $main = if ($language -eq 'jai') { 'main.jai' } else { 'main.c' }
 $forbear = if ($language -eq 'jai') { 'modules/forbear' } else { 'forbear' }
 
