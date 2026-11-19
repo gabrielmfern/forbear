@@ -29,7 +29,7 @@ curl -fsSL https://forbear.dev/quick-start.sh | sh
 ```
 On Windows, in PowerShell:
 ```powershell
-irm https://forbear.dev/quick-start.ps1 | iex
+irm https://www.forbear.dev/quick-start.ps1 | iex
 ```
 It ends by printing the commands to build your program.
 
