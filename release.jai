@@ -38,11 +38,11 @@ release :: () {
     stage := join(root, ".build/release/");
     if is_directory(stage) delete_directory(stage);
 
-    run(join(root, "c-api"), compiler, "c-api.jai", "-", "no_javascript");
+    run(root, compiler, "c-api.jai", "-", "no_javascript");
 
     jai := tprint("%forbear-jai-%/", stage, platform);
     copy(join(root, "forbear.jai"), join(jai, "module.jai"));
-    for string.["bindings-darwin.jai", "bindings-linux.jai", "bindings-win32.jai",
+    for string.["bindings.jai",
                 tprint("vendor/freetype-%.%", platform, static_lib),
                 tprint("vendor/kb_text_shape-%.%", platform, static_lib)] {
         copy(join(root, it), join(jai, it));
@@ -51,7 +51,7 @@ release :: () {
 
     c := tprint("%forbear-c-%/", stage, platform);
     for c_libraries copy(tprint("%.build/%", root, it), join(c, it));
-    copy(join(root, "c-api/forbear.h"), join(c, "forbear.h"));
+    copy(join(root, "forbear.h"), join(c, "forbear.h"));
     copy(join(root, "LICENSE"), join(c, "LICENSE"));
 
     exists := run_command("gh", "release", "view", tag, working_directory = root).exit_code == 0;

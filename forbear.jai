@@ -9,6 +9,8 @@ operator * :: Math.operator *;
 operator / :: Math.operator /;
 operator == :: Math.operator ==;
 
+#load "bindings.jai";
+
 #scope_module
 
 // TO-DO: Benchmark and improve the time with this enabled one every operating system, I am certain
@@ -315,7 +317,6 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
 }
 
 #if OS == .WINDOWS {
-    #load "bindings-win32.jai";
     #import "Windows";
     #import "Windows_Utf8";
     #import "Windows_Registry";
@@ -874,7 +875,6 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     Backend :: Windows_GL_Backend;
     Window :: Windows_GL_Window;
 } else #if OS == .MACOS {
-    #load "bindings-darwin.jai";
     #import "Objective_C";
     #import "Objective_C/AppKit";
     #import "Process";
@@ -1219,8 +1219,6 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         run_command("codesign", "--force", "--deep", "-s", "-", app);
     }
 } else #if OS == .LINUX {
-    #load "bindings-linux.jai";
-
     #scope_module
     WAYLAND_DEBUGGING   :: false;
     EGL_DEBUGGING       :: false;
