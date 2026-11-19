@@ -1,13 +1,14 @@
 #!/bin/sh
 set -eu
 languages="jai c"
+if command -v jai > /dev/null 2>&1; then default=jai; else default=c; fi
 
 printf 'Project name (untitled-program): '
 read -r dir < /dev/tty
 dir=${dir:-untitled-program}
-printf 'Language: %s (jai): ' "$(echo $languages | sed 's/ /, /g')"
+printf 'Language: %s (%s): ' "$(echo $languages | sed 's/ /, /g')" "$default"
 read -r language < /dev/tty
-language=${language:-jai}
+language=${language:-$default}
 case " $languages " in *" $language "*) ;; *) echo "Unknown language '$language', expected one of: $languages" >&2; exit 1 ;; esac
 
 base=https://raw.githubusercontent.com/gabrielmfern/forbear/${FORBEAR_REF:-main}

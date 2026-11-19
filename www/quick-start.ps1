@@ -2,11 +2,12 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $languages = 'jai', 'c'
+$default = if (Get-Command jai -ErrorAction SilentlyContinue) { 'jai' } else { 'c' }
 
 $dir = Read-Host 'Project name (untitled-program)'
 if (!$dir) { $dir = 'untitled-program' }
-$language = Read-Host "Language: $($languages -join ', ') (jai)"
-if (!$language) { $language = 'jai' }
+$language = Read-Host "Language: $($languages -join ', ') ($default)"
+if (!$language) { $language = $default }
 if ($language -notin $languages) { throw "Unknown language '$language', expected one of: $($languages -join ', ')" }
 
 $ref = if ($env:FORBEAR_REF) { $env:FORBEAR_REF } else { 'main' }
