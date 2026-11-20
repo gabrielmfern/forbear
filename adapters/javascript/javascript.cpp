@@ -18,7 +18,7 @@ extern "C" void forbear_close_element(void* adapter);
 extern "C" void forbear_text(void* adapter, void* js_style_object, char* content_data, int64_t content_count, char* manual_key_data, int64_t manual_key_count);
 extern "C" void forbear_open_scope(void* adapter, char* key_data, int64_t key_count);
 extern "C" void forbear_close_scope(void* adapter);
-extern "C" bool forbear_on_key_down(void* adapter, uint32_t code_point);
+extern "C" bool forbear_on_key_down(void* adapter, uint32_t code_point, uint8_t modifiers);
 extern "C" bool forbear_on_click(void* adapter, uint8_t button);
 
 enum JavascriptStyleField : uint8_t {
@@ -857,8 +857,40 @@ void on_key_down(const v8::FunctionCallbackInfo<v8::Value>& info) {
         ));
         return;
     }
+    static const char* modifier_names[] = {
+        "shift-left", "shift-right", "control-left", "control-right",
+        "alt-left", "alt-right", "super-left", "super-right",
+    };
+    uint8_t modifiers = 0;
+    if (info.Length() >= 2) {
+        if (!info[1]->IsArray()) {
+            isolate->ThrowException(v8::Exception::TypeError(
+                v8::String::NewFromUtf8Literal(isolate, "onKeyDown expects modifiers to be an array like [\"control-left\"]")
+            ));
+            return;
+        }
+        auto context = isolate->GetCurrentContext();
+        auto array = info[1].As<v8::Array>();
+        for (uint32_t i = 0; i < array->Length(); i += 1) {
+            v8::Local<v8::Value> item;
+            int bit = -1;
+            if (array->Get(context, i).ToLocal(&item) && item->IsString()) {
+                v8::String::Utf8Value name(isolate, item);
+                for (int j = 0; j < 8; j += 1) {
+                    if (strcmp(*name, modifier_names[j]) == 0) bit = j;
+                }
+            }
+            if (bit == -1) {
+                isolate->ThrowException(v8::Exception::TypeError(
+                    v8::String::NewFromUtf8Literal(isolate, "onKeyDown modifiers must be \"shift-left\", \"shift-right\", \"control-left\", \"control-right\", \"alt-left\", \"alt-right\", \"super-left\" or \"super-right\"")
+                ));
+                return;
+            }
+            modifiers |= 1 << bit;
+        }
+    }
     v8::String::Value key(isolate, info[0]);
-    info.GetReturnValue().Set(forbear_on_key_down(runtime->adapter, (*key)[0]));
+    info.GetReturnValue().Set(forbear_on_key_down(runtime->adapter, (*key)[0], modifiers));
 }
 
 void on_click(const v8::FunctionCallbackInfo<v8::Value>& info) {

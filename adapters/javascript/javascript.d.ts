@@ -127,7 +127,10 @@ declare function toTopRight(): Vector2;
 declare function toBottomLeft(): Vector2;
 declare function toBottomRight(): Vector2;
 
-declare function onKeyDown(key: string): boolean;
+type Modifier =
+    | "shift-left" | "shift-right" | "control-left" | "control-right"
+    | "alt-left" | "alt-right" | "super-left" | "super-right";
+declare function onKeyDown(key: string, modifiers?: Modifier[]): boolean;
 declare function onClick(button?: "left" | "right" | "middle"): boolean;
 
 declare function setRenderFunction(render: () => any): void;

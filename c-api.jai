@@ -646,7 +646,11 @@ Math :: #import "Math";
     #program_export
     fb_on_key_down :: (key: Key, on_repeat: bool) -> bool #c_call { push_context frame_context { return on_key_down(key, on_repeat); } }
     #program_export
+    fb_on_key_down_with_modifiers :: (key: Key, on_repeat: bool, modifiers: Modifiers) -> bool #c_call { push_context frame_context { return on_key_down(key, on_repeat, modifiers); } }
+    #program_export
     fb_on_key_up :: (key: Key) -> bool #c_call { push_context frame_context { return on_key_up(key); } }
+    #program_export
+    fb_on_key_up_with_modifiers :: (key: Key, modifiers: Modifiers) -> bool #c_call { push_context frame_context { return on_key_up(key, modifiers); } }
     #program_export
     fb_is_key_held :: (key: Key) -> bool #c_call { push_context frame_context { return is_key_held(key); } }
 }

@@ -505,8 +505,8 @@ forbear_close_scope :: (adapter: *Javascript_Adapter) #c_call {
 }
 
 #program_export
-forbear_on_key_down :: (adapter: *Javascript_Adapter, code_point: u32) -> bool #c_call {
-    push_context adapter.frame_context { return on_key_down(code_point); }
+forbear_on_key_down :: (adapter: *Javascript_Adapter, code_point: u32, modifiers: Modifiers) -> bool #c_call {
+    push_context adapter.frame_context { return on_key_down(code_point, modifiers = modifiers); }
 }
 
 #program_export
