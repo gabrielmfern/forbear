@@ -321,44 +321,57 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     #import "Windows_Utf8";
     #import "Windows_Registry";
     #import "Unicode";
-    user32 :: #library,system "user32";
+    user32   :: #library,system "user32";
     kernel32 :: #library,system "kernel32";
 
-    AdjustWindowRectExForDpi :: (rect: *RECT, style: u32, menu: BOOL, extended_style: u32, dpi: u32) -> BOOL #foreign user32;
-    DiscardVirtualMemory :: (VirtualAddress: *void, Size: SIZE_T) -> DWORD #foreign kernel32;
-    GetDpiForWindow :: (hwnd: HWND) -> u32 #foreign user32;
-    GetWindowLongPtrW :: (hwnd: HWND, index: s32) -> s64 #foreign user32;
+    AdjustWindowRectExForDpi      :: (rect:           *RECT,
+                                      style:          u32,
+                                      menu:           BOOL,
+                                      extended_style: u32,
+                                      dpi:            u32) -> BOOL #foreign user32;
+    DiscardVirtualMemory          :: (VirtualAddress: *void, Size: SIZE_T) -> DWORD #foreign kernel32;
+    GetDpiForWindow               :: (hwnd: HWND) -> u32 #foreign user32;
+    GetWindowLongPtrW             :: (hwnd: HWND, index: s32) -> s64 #foreign user32;
     SetProcessDpiAwarenessContext :: (value: HANDLE) -> BOOL #foreign user32;
-    SetProcessWorkingSetSize :: (hProcess: HANDLE, dwMinimumWorkingSetSize: SIZE_T, dwMaximumWorkingSetSize: SIZE_T) -> BOOL #foreign kernel32;
+    SetProcessWorkingSetSize      :: (hProcess:                HANDLE,
+                                      dwMinimumWorkingSetSize: SIZE_T,
+                                      dwMaximumWorkingSetSize: SIZE_T) -> BOOL #foreign kernel32;
     TRACKMOUSEEVENT :: struct {
-        cbSize: DWORD;
-        dwFlags: DWORD;
-        hwndTrack: HWND;
+        cbSize:      DWORD;
+        dwFlags:     DWORD;
+        hwndTrack:   HWND;
         dwHoverTime: DWORD;
     };
-    TrackMouseEvent :: (lpEventTrack: *TRACKMOUSEEVENT) -> BOOL #foreign user32;
-    ToUnicodeEx :: (wVirtKey: u32, wScanCode: u32, lpKeyState: *u8, pwszBuff: *u16, cchBuff: s32, wFlags: u32, dwhkl: *void) -> s32 #foreign user32;
-    GetKeyboardState :: (lpKeyState: *u8) -> BOOL #foreign user32;
-    GetKeyboardLayout :: (idThread: DWORD) -> *void #foreign user32;
-    CharLowerW :: (lpsz: *u16) -> *u16 #foreign user32;
-    MapVirtualKeyW :: (uCode: u32, uMapType: u32) -> u32 #foreign user32;
-    SetTimer :: (hWnd: HWND, nIDEvent: u64, uElapse: u32, lpTimerFunc: *void) -> u64 #foreign user32;
-    KillTimer :: (hWnd: HWND, uIDEvent: u64) -> BOOL #foreign user32;
-    WaitMessage :: () -> BOOL #foreign user32;
-    IsIconic :: (hWnd: HWND) -> BOOL #foreign user32;
-    GetMessageTime :: () -> s32 #foreign user32;
+    TrackMouseEvent            :: (lpEventTrack: *TRACKMOUSEEVENT) -> BOOL #foreign user32;
+    ToUnicodeEx                :: (wVirtKey:   u32,
+                                   wScanCode:  u32,
+                                   lpKeyState: *u8,
+                                   pwszBuff:   *u16,
+                                   cchBuff:    s32,
+                                   wFlags:     u32,
+                                   dwhkl:      *void) -> s32 #foreign user32;
+    GetKeyboardState           :: (lpKeyState: *u8) -> BOOL #foreign user32;
+    GetKeyboardLayout          :: (idThread: DWORD) -> *void #foreign user32;
+    CharLowerW                 :: (lpsz: *u16) -> *u16 #foreign user32;
+    MapVirtualKeyW             :: (uCode: u32, uMapType: u32) -> u32 #foreign user32;
+    SetTimer                   :: (hWnd: HWND, nIDEvent: u64, uElapse: u32, lpTimerFunc: *void) -> u64 #foreign user32;
+    KillTimer                  :: (hWnd: HWND, uIDEvent: u64) -> BOOL #foreign user32;
+    WaitMessage                :: () -> BOOL #foreign user32;
+    IsIconic                   :: (hWnd: HWND) -> BOOL #foreign user32;
+    GetMessageTime             :: () -> s32 #foreign user32;
     GetClipboardSequenceNumber :: () -> DWORD #foreign user32;
-    GlobalFree :: (hMem: HGLOBAL) -> HGLOBAL #foreign kernel32;
+    GlobalFree                 :: (hMem: HGLOBAL) -> HGLOBAL #foreign kernel32;
 
     MODAL_TAKEOVER_TIMER :: 1;
 
     MAPVK_VSC_TO_VK_EX :: 3;
-    GWLP_USERDATA :: -21;
-    TME_LEAVE :: 0x00000002;
-    WM_MOUSELEAVE :: 0x02A3;
-    WM_ENTERMENULOOP :: 0x0211;
-    WM_EXITMENULOOP :: 0x0212;
-    WM_CAPTURECHANGED :: 0x0215;
+    GWLP_USERDATA      :: -21;
+    TME_LEAVE          :: 0x00000002;
+    WM_MOUSELEAVE      :: 0x02A3;
+    WM_ENTERMENULOOP   :: 0x0211;
+    WM_EXITMENULOOP    :: 0x0212;
+    WM_CAPTURECHANGED  :: 0x0215;
+    WM_PASTE           :: 0x0302;
 
     Windows_GL_Backend :: struct {
         #if C_ABI {
@@ -378,8 +391,8 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                              lParam: LPARAM) -> result: s64, handled: bool;
         }
 
-        message: Message_Proc;
-        message_data: *void;
+        message:         Message_Proc;
+        message_data:    *void;
         wndproc_context: *#Context;
 
         cursors: [CURSOR_COUNT]HCURSOR;
@@ -390,12 +403,12 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
             Render_Proc :: #type (data: *void);
         }
 
-        render: Render_Proc;
+        render:      Render_Proc;
         render_data: *void;
 
-        clipboard_sequence: DWORD;
+        clipboard_sequence:    DWORD;
         clipboard_text_buffer: string;
-        clipboard_text: string;
+        clipboard_text:        string;
     };
     init_backend :: (using backend: *Windows_GL_Backend) {
         wndproc_context = *context;
@@ -577,124 +590,6 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             if message == WM_XBUTTONUP {
                                 result = 1;
                             }
-                        case WM_CHAR;
-                            using window.keyboard_state;
-                            unit := cast(u16) wparam;
-                            code_point: u32;
-                            if is_high_surrogate(unit) {
-                                high_surrogate = unit;
-                            } else if is_low_surrogate(unit) {
-                                if is_high_surrogate(high_surrogate) {
-                                    code_point = utf16_to_code_point(u16.[high_surrogate, unit], 2);
-                                }
-                                high_surrogate = 0;
-                            } else {
-                                code_point = unit;
-                            }
-                            if code_point != 0 {
-                                bytes: [4]u8;
-                                utf8 := string.{ data = bytes.data };
-                                character_utf32_to_utf8(code_point, *utf8);
-                                append_text(utf8, *window.text, window.text_buffer);
-                            }
-                        case WM_SYSCHAR;
-                            // Text typed while Alt is held
-                            if wparam == #char " " {
-                                result = DefWindowProcW(hwnd, message, wparam, lparam);
-                            }
-                        case WM_SYSKEYDOWN; #through;
-                        case WM_KEYDOWN;
-                            using window.keyboard_state;
-                            if wparam != VK_PROCESSKEY && wparam != VK_PACKET { // Ignores keys typed during an IME compose event
-                                repeated := (lparam >> 30) & 1;
-                                scancode := cast(u32) ((lparam >> 16) & 0xFF);
-                                extended := (lparam >> 24) & 1;
-                                index    := scancode | (extended << 8);
-                                altgr_control := false;
-                                if wparam == VK_CONTROL && extended == 0 {
-                                    next: MSG;
-                                    altgr_control = PeekMessageW(*next, null, 0, 0, PM_NOREMOVE) != 0 &&
-                                        (next.message == WM_KEYDOWN || next.message == WM_SYSKEYDOWN) &&
-                                        next.wParam == VK_MENU &&
-                                        ((next.lParam >> 24) & 1) == 1 &&
-                                        next.time == GetMessageTime();
-                                }
-                                if altgr_control {
-                                } else if repeated && held[index] != 0 {
-                                    add_key_event(*events, Key_Event.{ .REPEATED, held[index] });
-                                } else {
-                                    key: Key = 0;
-                                    if wparam == {
-                                        case VK_ESCAPE;  key = .ESCAPE;
-                                        case VK_RETURN;  key = .ENTER;
-                                        case VK_TAB;     key = .TAB;
-                                        case VK_BACK;    key = .BACKSPACE;
-                                        case VK_DELETE;  key = .DELETE;
-                                        case VK_INSERT;  key = .INSERT;
-                                        case VK_LEFT;    key = .ARROW_LEFT;
-                                        case VK_RIGHT;   key = .ARROW_RIGHT;
-                                        case VK_UP;      key = .ARROW_UP;
-                                        case VK_DOWN;    key = .ARROW_DOWN;
-                                        case VK_HOME;    key = .HOME;
-                                        case VK_END;     key = .END;
-                                        case VK_PRIOR;   key = .PAGE_UP;
-                                        case VK_NEXT;    key = .PAGE_DOWN;
-                                        case VK_F1;      key = .F1;
-                                        case VK_F2;      key = .F2;
-                                        case VK_F3;      key = .F3;
-                                        case VK_F4;      key = .F4;
-                                        case VK_F5;      key = .F5;
-                                        case VK_F6;      key = .F6;
-                                        case VK_F7;      key = .F7;
-                                        case VK_F8;      key = .F8;
-                                        case VK_F9;      key = .F9;
-                                        case VK_F10;     key = .F10;
-                                        case VK_F11;     key = .F11;
-                                        case VK_F12;     key = .F12;
-                                        case VK_F13;     key = .F13;
-                                        case VK_F14;     key = .F14;
-                                        case VK_F15;     key = .F15;
-                                        case VK_F16;     key = .F16;
-                                        case VK_F17;     key = .F17;
-                                        case VK_F18;     key = .F18;
-                                        case VK_F19;     key = .F19;
-                                        case VK_F20;     key = .F20;
-                                        case VK_VOLUME_UP;   key = .VOLUME_UP;
-                                        case VK_VOLUME_DOWN; key = .VOLUME_DOWN;
-                                        case VK_VOLUME_MUTE; key = .VOLUME_MUTE;
-                                        case VK_APPS;    key = .CONTEXT_MENU;
-                                        case VK_HELP;    key = .HELP;
-                                        case VK_SHIFT;   #through;
-                                        case VK_CONTROL; #through;
-                                        case VK_MENU;
-                                            vk := MapVirtualKeyW(scancode | cast(u32) (ifx extended then 0xE000 else 0), MAPVK_VSC_TO_VK_EX);
-                                            if vk == {
-                                                case VK_LSHIFT;   key = .SHIFT_LEFT;
-                                                case VK_RSHIFT;   key = .SHIFT_RIGHT;
-                                                case VK_LCONTROL; key = .CONTROL_LEFT;
-                                                case VK_RCONTROL; key = .CONTROL_RIGHT;
-                                                case VK_LMENU;    key = .ALT_LEFT;
-                                                case VK_RMENU;    key = .ALT_RIGHT;
-                                            }
-                                        case VK_LWIN;    key = .SUPER_LEFT;
-                                        case VK_RWIN;    key = .SUPER_RIGHT;
-                                        case VK_CAPITAL; key = .CAPS_LOCK;
-                                        case;
-                                            // The key could not be found, meaning it's not in the named ones, so we're going to write it as a character instead
-                                            key = key_from_virtual_key(xx wparam, scancode);
-                                    }
-                                    if key != 0 {
-                                        held[index] = key;
-                                        add_key_event(*events, Key_Event.{ .PRESSED, key });
-                                    }
-                                    if wparam == VK_SHIFT || wparam == VK_CONTROL || wparam == VK_MENU || wparam == VK_CAPITAL {
-                                        update_held_keys_by_modifiers(window.backend, *window.keyboard_state);
-                                    }
-                                }
-                            }
-                            if message == WM_SYSKEYDOWN {
-                                result = DefWindowProcW(hwnd, message, wparam, lparam);
-                            }
                         case WM_DPICHANGED;
                             window.scale = cast(float64) (wparam & 0xFFFF) / 96.0;
                             suggested := cast(*RECT) lparam;
@@ -717,6 +612,131 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                                 window.theme = ifx status == 0 && value == 0 then .DARK else .LIGHT;
                             }
                             result = DefWindowProcW(hwnd, message, wparam, lparam);
+                        case WM_CHAR;
+                            using window.keyboard_state;
+                            unit       := cast(u16) wparam;
+                            code_point : u32;
+                            if is_high_surrogate(unit) {
+                                high_surrogate = unit;
+                            } else if is_low_surrogate(unit) {
+                                if is_high_surrogate(high_surrogate) {
+                                    code_point = utf16_to_code_point(u16.[high_surrogate, unit], 2);
+                                }
+                                high_surrogate = 0;
+                            } else {
+                                code_point = unit;
+                            }
+                            if code_point != 0 {
+                                bytes : [4]u8;
+                                utf8  := string.{ data = bytes.data };
+                                character_utf32_to_utf8(code_point, *utf8);
+                                append_text(utf8, *window.text, window.text_buffer);
+                            }
+                        case WM_SYSCHAR;
+                            // Text typed while Alt is held
+                            if wparam == #char " " {
+                                result = DefWindowProcW(hwnd, message, wparam, lparam);
+                            }
+                        case WM_SYSKEYDOWN; #through;
+                        case WM_KEYDOWN;
+                            using window.keyboard_state;
+                            if wparam != VK_PROCESSKEY && wparam != VK_PACKET { // Ignores keys typed during an IME compose event
+                                repeated      := (lparam >> 30) & 1;
+                                scancode      := cast(u32) ((lparam >> 16) & 0xFF);
+                                extended      := (lparam >> 24) & 1;
+                                index         := scancode | (extended << 8);
+                                altgr_control := false;
+
+
+
+                                if wparam == VK_CONTROL && extended == 0 {
+                                    next: MSG;
+                                    altgr_control =
+                                           PeekMessageW(*next, null, 0, 0, PM_NOREMOVE) != 0
+                                        && (next.message == WM_KEYDOWN || next.message == WM_SYSKEYDOWN)
+                                        && next.wParam == VK_MENU
+                                        && ((next.lParam >> 24) & 1) == 1
+                                        && next.time == GetMessageTime();
+                                }
+                                if altgr_control {
+                                } else if repeated && held[index] != 0 {
+                                    add_key_event(*events, Key_Event.{ .REPEATED, held[index] });
+                                } else {
+                                    key: Key = 0;
+                                    if wparam == {
+                                        case VK_ESCAPE;      key = .ESCAPE;
+                                        case VK_RETURN;      key = .ENTER;
+                                        case VK_TAB;         key = .TAB;
+                                        case VK_BACK;        key = .BACKSPACE;
+                                        case VK_DELETE;      key = .DELETE;
+                                        case VK_INSERT;      key = .INSERT;
+                                        case VK_LEFT;        key = .ARROW_LEFT;
+                                        case VK_RIGHT;       key = .ARROW_RIGHT;
+                                        case VK_UP;          key = .ARROW_UP;
+                                        case VK_DOWN;        key = .ARROW_DOWN;
+                                        case VK_HOME;        key = .HOME;
+                                        case VK_END;         key = .END;
+                                        case VK_PRIOR;       key = .PAGE_UP;
+                                        case VK_NEXT;        key = .PAGE_DOWN;
+                                        case VK_F1;          key = .F1;
+                                        case VK_F2;          key = .F2;
+                                        case VK_F3;          key = .F3;
+                                        case VK_F4;          key = .F4;
+                                        case VK_F5;          key = .F5;
+                                        case VK_F6;          key = .F6;
+                                        case VK_F7;          key = .F7;
+                                        case VK_F8;          key = .F8;
+                                        case VK_F9;          key = .F9;
+                                        case VK_F10;         key = .F10;
+                                        case VK_F11;         key = .F11;
+                                        case VK_F12;         key = .F12;
+                                        case VK_F13;         key = .F13;
+                                        case VK_F14;         key = .F14;
+                                        case VK_F15;         key = .F15;
+                                        case VK_F16;         key = .F16;
+                                        case VK_F17;         key = .F17;
+                                        case VK_F18;         key = .F18;
+                                        case VK_F19;         key = .F19;
+                                        case VK_F20;         key = .F20;
+                                        case VK_VOLUME_UP;   key = .VOLUME_UP;
+                                        case VK_VOLUME_DOWN; key = .VOLUME_DOWN;
+                                        case VK_VOLUME_MUTE; key = .VOLUME_MUTE;
+                                        case VK_APPS;        key = .CONTEXT_MENU;
+                                        case VK_HELP;        key = .HELP;
+                                        case VK_SHIFT;       #through;
+                                        case VK_CONTROL;     #through;
+                                        case VK_MENU;
+                                            vk := MapVirtualKeyW(scancode | cast(u32) (ifx extended then 0xE000 else 0), MAPVK_VSC_TO_VK_EX);
+                                            if vk == {
+                                                case VK_LSHIFT;   key = .SHIFT_LEFT;
+                                                case VK_RSHIFT;   key = .SHIFT_RIGHT;
+                                                case VK_LCONTROL; key = .CONTROL_LEFT;
+                                                case VK_RCONTROL; key = .CONTROL_RIGHT;
+                                                case VK_LMENU;    key = .ALT_LEFT;
+                                                case VK_RMENU;    key = .ALT_RIGHT;
+                                            }
+                                        case VK_LWIN;    key = .SUPER_LEFT;
+                                        case VK_RWIN;    key = .SUPER_RIGHT;
+                                        case VK_CAPITAL; key = .CAPS_LOCK;
+                                        case;
+                                            // The key could not be found, meaning it's not in the named ones, so we're going to write it as a character instead
+                                            key = key_from_virtual_key(xx wparam, scancode);
+                                    }
+                                    if key != 0 {
+                                        held[index] = key;
+                                        add_key_event(*events, Key_Event.{ .PRESSED, key });
+                                    }
+                                    if     wparam == VK_SHIFT
+                                        || wparam == VK_CONTROL
+                                        || wparam == VK_MENU
+                                        || wparam == VK_CAPITAL {
+                                        update_held_keys_by_modifiers(window.backend, *window.keyboard_state);
+                                    }
+                                }
+                            }
+                            if message == WM_SYSKEYDOWN {
+                                result = DefWindowProcW(hwnd, message, wparam, lparam);
+                            }
                         case WM_KEYUP; #through;
                         case WM_SYSKEYUP;
                             using window.keyboard_state;
@@ -4052,6 +4072,11 @@ Key :: enum u32 {
     CONTEXT_MENU;
     HELP;
 }
+MODIFIERS :: Key.[
+    .SHIFT_LEFT, .SHIFT_RIGHT, .CONTROL_LEFT,
+    .CONTROL_RIGHT, .ALT_LEFT, .ALT_RIGHT,
+    .SUPER_LEFT, .SUPER_RIGHT
+];
 MOUSE_BUTTON_COUNT :: #run enum_highest_value(Mouse_Button) + 1;
 Mouse_Button :: enum {
     #if OS == .LINUX {
@@ -4289,57 +4314,55 @@ on_key_up :: (key: Key) -> bool {
 }
 is_key_held :: (key: Key) -> bool {
     using context.forbear;
-    if !window.keyboard_state.simulated {
-        #if OS == .WINDOWS {
-            vk: s32;
+    #if OS == .WINDOWS {
+        vk: s32;
+        if key == {
+            case .SHIFT_LEFT;    vk = VK_LSHIFT;
+            case .SHIFT_RIGHT;   vk = VK_RSHIFT;
+            case .CONTROL_LEFT;  vk = VK_LCONTROL;
+            case .CONTROL_RIGHT; vk = VK_RCONTROL;
+            case .ALT_LEFT;      vk = VK_LMENU;
+            case .ALT_RIGHT;     vk = VK_RMENU;
+            case .SUPER_LEFT;    vk = VK_LWIN;
+            case .SUPER_RIGHT;   vk = VK_RWIN;
+        }
+        if vk != 0 {
+            return GetKeyState(vk) < 0;
+        }
+    } else #if OS == .MACOS {
+        if key >= .SHIFT_LEFT && key <= .SUPER_RIGHT {
+            current_flags: (*void, Selector) -> NSEventModifierFlags #c_call = xx objc_msgSend;
+            flags := current_flags(xx class(NSEvent), selector("modifierFlags"));
+            mask: NSEventModifierFlags;
             if key == {
-                case .SHIFT_LEFT;    vk = VK_LSHIFT;
-                case .SHIFT_RIGHT;   vk = VK_RSHIFT;
-                case .CONTROL_LEFT;  vk = VK_LCONTROL;
-                case .CONTROL_RIGHT; vk = VK_RCONTROL;
-                case .ALT_LEFT;      vk = VK_LMENU;
-                case .ALT_RIGHT;     vk = VK_RMENU;
-                case .SUPER_LEFT;    vk = VK_LWIN;
-                case .SUPER_RIGHT;   vk = VK_RWIN;
+                case .SHIFT_LEFT;    #through;
+                case .SHIFT_RIGHT;   mask = .NSEventModifierFlagShift;
+                case .CONTROL_LEFT;  #through;
+                case .CONTROL_RIGHT; mask = .NSEventModifierFlagControl;
+                case .ALT_LEFT;      #through;
+                case .ALT_RIGHT;     mask = .NSEventModifierFlagOption;
+                case .SUPER_LEFT;    #through;
+                case .SUPER_RIGHT;   mask = .NSEventModifierFlagCommand;
             }
-            if vk != 0 {
-                return GetKeyState(vk) < 0;
+            if !(flags & mask) {
+                return false;
             }
-        } else #if OS == .MACOS {
-            if key >= .SHIFT_LEFT && key <= .SUPER_RIGHT {
-                current_flags: (*void, Selector) -> NSEventModifierFlags #c_call = xx objc_msgSend;
-                flags := current_flags(xx class(NSEvent), selector("modifierFlags"));
-                mask: NSEventModifierFlags;
-                if key == {
-                    case .SHIFT_LEFT;    #through;
-                    case .SHIFT_RIGHT;   mask = .NSEventModifierFlagShift;
-                    case .CONTROL_LEFT;  #through;
-                    case .CONTROL_RIGHT; mask = .NSEventModifierFlagControl;
-                    case .ALT_LEFT;      #through;
-                    case .ALT_RIGHT;     mask = .NSEventModifierFlagOption;
-                    case .SUPER_LEFT;    #through;
-                    case .SUPER_RIGHT;   mask = .NSEventModifierFlagCommand;
-                }
-                if !(flags & mask) {
-                    return false;
-                }
-            }
-        } else #if OS == .LINUX {
-            if key == {
-                // TODO(depessimization): for all modifiers here we're lookgin them up by name when we should instead store the index of the modifier and just look it up
-                case .SHIFT_LEFT; #through;
-                case .SHIFT_RIGHT;
-                    return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_SHIFT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-                case .ALT_LEFT; #through;
-                case .ALT_RIGHT;
-                    return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-                case .CONTROL_LEFT; #through;
+        }
+    } else #if OS == .LINUX {
+        if key == {
+            // TODO(depessimization): for all modifiers here we're lookgin them up by name when we should instead store the index of the modifier and just look it up
+            case .SHIFT_LEFT; #through;
+            case .SHIFT_RIGHT;
+                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_SHIFT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+            case .ALT_LEFT; #through;
+            case .ALT_RIGHT;
+                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
+            case .CONTROL_LEFT; #through;
                 case .CONTROL_RIGHT;
                     return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_CTRL.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
                 case .SUPER_LEFT; #through;
                 case .SUPER_RIGHT;
                     return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-            }
         }
     }
 
