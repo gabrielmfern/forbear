@@ -5,7 +5,6 @@
     - Currently minimizing the macOS window stops running the program
     - Menu bar for macOS
         - We need to at least have command+q working
-    - API to set the minimum and maximum sizes of the window
     - API to set the window to full screen
 - Documentation
 - Primitives that allow handling focus
