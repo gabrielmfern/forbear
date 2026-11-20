@@ -84,6 +84,11 @@ render :: (data: *void) {
         }
         text("this was the input text until now: '%'", to_string(input.data, input.count));
 
+        if on_paste() {
+            get_clipboard_text();
+            print("pasting, this should happen");
+        }
+
         for key: context.forbear.window.keyboard_state.held {
             if key != 0 {
                 string_key := sprint("%", key);

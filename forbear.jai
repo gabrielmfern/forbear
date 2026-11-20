@@ -371,7 +371,6 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
     WM_ENTERMENULOOP   :: 0x0211;
     WM_EXITMENULOOP    :: 0x0212;
     WM_CAPTURECHANGED  :: 0x0215;
-    WM_PASTE           :: 0x0302;
 
     Windows_GL_Backend :: struct {
         #if C_ABI {
@@ -660,7 +659,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                                 }
                                 if altgr_control {
                                 } else if repeated && held[index] != 0 {
-                                    add_key_event(*events, Key_Event.{ .REPEATED, held[index] });
+                                    add_key_event(*events, .REPEATED, held[index]);
                                 } else {
                                     key: Key = 0;
                                     if wparam == {
@@ -724,7 +723,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                                     }
                                     if key != 0 {
                                         held[index] = key;
-                                        add_key_event(*events, Key_Event.{ .PRESSED, key });
+                                        add_key_event(*events, .PRESSED, key);
                                     }
                                     if     wparam == VK_SHIFT
                                         || wparam == VK_CONTROL
@@ -745,7 +744,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             index := scancode | (extended << 8);
                             key := held[index];
                             if key != 0 {
-                                add_key_event(*events, .{.RELEASED, key});
+                                add_key_event(*events, .RELEASED, key);
                                 held[index] = 0;
                             }
                             if wparam == VK_SHIFT || wparam == VK_CONTROL || wparam == VK_MENU || wparam == VK_CAPITAL {
@@ -1143,11 +1142,11 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                     case NSEventTypeKeyDown;
                         code := NSEvent.keyCode(event);
                         if NSEvent.isARepeat(event) && held[code] != 0 {
-                            add_key_event(*events, Key_Event.{.REPEATED, held[code]});
+                            add_key_event(*events, .REPEATED, held[code]);
                         } else {
                             key := key_from_key_code(code);
                             if key != 0 {
-                                add_key_event(*events, Key_Event.{.PRESSED, key});
+                                add_key_event(*events, .PRESSED, key);
                                 held[code] = key;
                             }
                         }
@@ -1166,7 +1165,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                         code := NSEvent.keyCode(event);
                         key := held[code];
                         if key != 0 {
-                            add_key_event(*events, Key_Event.{.RELEASED, held[code]});
+                            add_key_event(*events, .RELEASED, held[code]);
                             held[code] = 0;
                         }
                     case NSEventTypeFlagsChanged;
@@ -1189,10 +1188,10 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                             }
 
                             if down && held[code] == 0 {
-                                add_key_event(*events, Key_Event.{.PRESSED, key});
+                                add_key_event(*events, .PRESSED, key);
                                 held[code] = key;
                             } else if !down && held[code] != 0 {
-                                add_key_event(*events, Key_Event.{.RELEASED, key});
+                                add_key_event(*events, .RELEASED, key);
                                 held[code] = 0;
                             }
                         }
@@ -2137,7 +2136,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                     if key_event.state == .RELEASED {
                         key := held[xkb_key_code];
                         if key != 0 {
-                            add_key_event(*events, Key_Event.{.RELEASED, key});
+                            add_key_event(*events, .RELEASED, key);
                             held[xkb_key_code] = 0;
                             if xkb_key_code == repeating_key_code {
                                 repeating_key_code = 0;
@@ -2148,7 +2147,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                         if symbol > 0 {
                             key := key_from_keysym(symbol);
                             if key != 0 {
-                                add_key_event(*events, Key_Event.{.PRESSED, key});
+                                add_key_event(*events, .PRESSED, key);
                                 held[xkb_key_code] = key;
                             }
 
@@ -2185,7 +2184,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                     } else if key_event.state == .REPEATED {
                         key := held[xkb_key_code];
                         if key != 0 {
-                            add_key_event(*events, Key_Event.{.REPEATED, key});
+                            add_key_event(*events, .REPEATED, key);
                             utf8: [64]u8;
                             append_text(key_text(backend.connection.key_state, xkb_key_code, utf8), *window.text, window.text_buffer);
                         }
@@ -3597,7 +3596,7 @@ Pool_Slot :: struct {
     used:       bool;
 };
 Node :: struct {
-    Kind :: enum {
+    Kind :: enum u8 {
         ELEMENT; SCOPE;
     }
     kind: Kind = .ELEMENT;
@@ -3967,10 +3966,54 @@ init_keyboard_state :: (using state: *Keyboard_State) {
     events.data  = events_buffer.data;
     events.count = 0;
 }
-add_key_event :: (events: *[]Key_Event, key_event: Key_Event) {
+add_key_event :: (events: *[]Key_Event, kind: Key_Event.Kind, key: Key) {
     assert(events.count < 32 * 3);
     events.count              += 1;
-    events.*[events.count - 1] = key_event;
+    events.*[events.count - 1] = .{ modifiers = current_modifiers(), kind = kind, key = key };
+}
+current_modifiers :: () -> Modifiers {
+    modifiers: Modifiers;
+    #if OS == .WINDOWS {
+        if GetKeyState(VK_LSHIFT)   < 0  modifiers |= .SHIFT_LEFT;
+        if GetKeyState(VK_RSHIFT)   < 0  modifiers |= .SHIFT_RIGHT;
+        if GetKeyState(VK_LCONTROL) < 0  modifiers |= .CONTROL_LEFT;
+        if GetKeyState(VK_RCONTROL) < 0  modifiers |= .CONTROL_RIGHT;
+        if GetKeyState(VK_LMENU)    < 0  modifiers |= .ALT_LEFT;
+        if GetKeyState(VK_RMENU)    < 0  modifiers |= .ALT_RIGHT;
+        if GetKeyState(VK_LWIN)     < 0  modifiers |= .SUPER_LEFT;
+        if GetKeyState(VK_RWIN)     < 0  modifiers |= .SUPER_RIGHT;
+    } else #if OS == .MACOS {
+        current_flags: (*void, Selector) -> u64 #c_call = xx objc_msgSend;
+        flags := current_flags(xx class(NSEvent), selector("modifierFlags"));
+        if flags & 0x00000001  modifiers |= .CONTROL_LEFT;
+        if flags & 0x00002000  modifiers |= .CONTROL_RIGHT;
+        if flags & 0x00000002  modifiers |= .SHIFT_LEFT;
+        if flags & 0x00000004  modifiers |= .SHIFT_RIGHT;
+        if flags & 0x00000020  modifiers |= .ALT_LEFT;
+        if flags & 0x00000040  modifiers |= .ALT_RIGHT;
+        if flags & 0x00000008  modifiers |= .SUPER_LEFT;
+        if flags & 0x00000010  modifiers |= .SUPER_RIGHT;
+    } else #if OS == .LINUX {
+        using context.forbear.window.keyboard_state;
+        key_state := context.forbear.backend.connection.key_state;
+        if xkb_state_mod_name_is_active(key_state, XKB_MOD_NAME_SHIFT.data, .XKB_STATE_MODS_EFFECTIVE) == 1 {
+            if held[62] != 0                    modifiers |= .SHIFT_RIGHT;
+            if held[50] != 0 || held[62] == 0   modifiers |= .SHIFT_LEFT;
+        }
+        if xkb_state_mod_name_is_active(key_state, XKB_MOD_NAME_CTRL.data, .XKB_STATE_MODS_EFFECTIVE) == 1 {
+            if held[105] != 0                   modifiers |= .CONTROL_RIGHT;
+            if held[37] != 0 || held[105] == 0  modifiers |= .CONTROL_LEFT;
+        }
+        if xkb_state_mod_name_is_active(key_state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 1 {
+            if held[108] != 0                   modifiers |= .ALT_RIGHT;
+            if held[64] != 0 || held[108] == 0  modifiers |= .ALT_LEFT;
+        }
+        if xkb_state_mod_name_is_active(key_state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 1 {
+            if held[134] != 0                   modifiers |= .SUPER_RIGHT;
+            if held[133] != 0 || held[134] == 0 modifiers |= .SUPER_LEFT;
+        }
+    }
+    return modifiers;
 }
 // This ensures that the keys held are updated as the modifiers change, so that, in a US Keyboard Layout doing SHIFT+EQUALS holds PLUS, and then releasing SHIFT makes it hold EQUALS. This only applies for keys that
 update_held_keys_by_modifiers :: (backend: *Backend, using state: *Keyboard_State) {
@@ -3989,7 +4032,7 @@ update_held_keys_by_modifiers :: (backend: *Backend, using state: *Keyboard_Stat
                 // This means that this key changes with some modifier on or off, so, we need to replace the previous
                 // key it represented in favor of a new one. We also need to trigger the release and pressed key events
                 // for both keys.
-                add_key_event(*events, Key_Event.{.RELEASED, key});
+                add_key_event(*events, .RELEASED, key);
                 held[code] = new_key;
                 #if OS == .LINUX {
                     if repeating_key_code == code {
@@ -4001,13 +4044,19 @@ update_held_keys_by_modifiers :: (backend: *Backend, using state: *Keyboard_Stat
     }
 }
 #scope_export
+Modifiers :: enum_flags u8 {
+    SHIFT_LEFT; SHIFT_RIGHT; CONTROL_LEFT;
+    CONTROL_RIGHT; ALT_LEFT; ALT_RIGHT;
+    SUPER_LEFT; SUPER_RIGHT;
+}
 Key_Event :: struct {
-    Kind :: enum {
+    Kind :: enum u8 {
         REPEATED; RELEASED; PRESSED;
     };
 
     kind: Kind;
     key: Key;
+    modifiers: Modifiers;
 }
 Key :: enum u32 {
     // Printable keys are their Unicode code point: cast(Key) #char "+"
@@ -4072,11 +4121,6 @@ Key :: enum u32 {
     CONTEXT_MENU;
     HELP;
 }
-MODIFIERS :: Key.[
-    .SHIFT_LEFT, .SHIFT_RIGHT, .CONTROL_LEFT,
-    .CONTROL_RIGHT, .ALT_LEFT, .ALT_RIGHT,
-    .SUPER_LEFT, .SUPER_RIGHT
-];
 MOUSE_BUTTON_COUNT :: #run enum_highest_value(Mouse_Button) + 1;
 Mouse_Button :: enum {
     #if OS == .LINUX {
@@ -4287,90 +4331,40 @@ set_cursor :: (cursor: Cursor) {
 get_text_input :: () -> string {
     return context.forbear.window.text;
 }
-on_key_down :: (code_point: u32, on_repeat := false) -> bool {
-    return on_key_down(cast(Key) code_point, on_repeat);
+on_paste :: (on_repeat := false) -> bool {
+    // TO-DO: on Windows, we should also handle WM_PASTE and return true here
+    return on_key_down(.V, on_repeat, modifiers = .CONTROL_LEFT)
+        || on_key_down(.INSERT, on_repeat, modifiers = .SHIFT_LEFT);
 }
-on_key_down :: (key: Key, on_repeat := false) -> bool {
+on_key_down :: (code_point: u32, on_repeat := false, modifiers: Modifiers = 0) -> bool {
+    return on_key_down(cast(Key) code_point, on_repeat, modifiers);
+}
+on_key_down :: (key: Key, on_repeat := false, modifiers: Modifiers = 0) -> bool {
     using context.forbear.window.keyboard_state;
     for event: events {
         if (event.kind == .PRESSED || (on_repeat && event.kind == .REPEATED))
-         && event.key == key {
+         && event.key == key && (event.modifiers & modifiers) == modifiers {
             return true;
         }
     }
     return false;
 }
-on_key_up :: (code_point: u32) -> bool {
-    return on_key_up(cast(Key) code_point);
+on_key_up :: (code_point: u32, modifiers: Modifiers = 0) -> bool {
+    return on_key_up(cast(Key) code_point, modifiers);
 }
-on_key_up :: (key: Key) -> bool {
+on_key_up :: (key: Key, modifiers: Modifiers = 0) -> bool {
     using context.forbear.window.keyboard_state;
     for event: events {
-        if event.kind == .RELEASED && event.key == key {
+        if event.kind == .RELEASED && event.key == key && (event.modifiers & modifiers) == modifiers {
             return true;
         }
     }
     return false;
 }
 is_key_held :: (key: Key) -> bool {
-    using context.forbear;
-    #if OS == .WINDOWS {
-        vk: s32;
-        if key == {
-            case .SHIFT_LEFT;    vk = VK_LSHIFT;
-            case .SHIFT_RIGHT;   vk = VK_RSHIFT;
-            case .CONTROL_LEFT;  vk = VK_LCONTROL;
-            case .CONTROL_RIGHT; vk = VK_RCONTROL;
-            case .ALT_LEFT;      vk = VK_LMENU;
-            case .ALT_RIGHT;     vk = VK_RMENU;
-            case .SUPER_LEFT;    vk = VK_LWIN;
-            case .SUPER_RIGHT;   vk = VK_RWIN;
-        }
-        if vk != 0 {
-            return GetKeyState(vk) < 0;
-        }
-    } else #if OS == .MACOS {
-        if key >= .SHIFT_LEFT && key <= .SUPER_RIGHT {
-            current_flags: (*void, Selector) -> NSEventModifierFlags #c_call = xx objc_msgSend;
-            flags := current_flags(xx class(NSEvent), selector("modifierFlags"));
-            mask: NSEventModifierFlags;
-            if key == {
-                case .SHIFT_LEFT;    #through;
-                case .SHIFT_RIGHT;   mask = .NSEventModifierFlagShift;
-                case .CONTROL_LEFT;  #through;
-                case .CONTROL_RIGHT; mask = .NSEventModifierFlagControl;
-                case .ALT_LEFT;      #through;
-                case .ALT_RIGHT;     mask = .NSEventModifierFlagOption;
-                case .SUPER_LEFT;    #through;
-                case .SUPER_RIGHT;   mask = .NSEventModifierFlagCommand;
-            }
-            if !(flags & mask) {
-                return false;
-            }
-        }
-    } else #if OS == .LINUX {
-        if key == {
-            // TODO(depessimization): for all modifiers here we're lookgin them up by name when we should instead store the index of the modifier and just look it up
-            case .SHIFT_LEFT; #through;
-            case .SHIFT_RIGHT;
-                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_SHIFT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-            case .ALT_LEFT; #through;
-            case .ALT_RIGHT;
-                return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_ALT.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-            case .CONTROL_LEFT; #through;
-                case .CONTROL_RIGHT;
-                    return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_CTRL.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-                case .SUPER_LEFT; #through;
-                case .SUPER_RIGHT;
-                    return xkb_state_mod_name_is_active(backend.connection.key_state, XKB_MOD_NAME_LOGO.data, .XKB_STATE_MODS_EFFECTIVE) == 1;
-        }
-    }
-
-    using window.keyboard_state;
-    for held {
-        if it == key {
-            return true;
-        }
+    using context.forbear.window.keyboard_state;
+    for held if it == key {
+        return true;
     }
     return false;
 }
@@ -6238,7 +6232,7 @@ prepare_for_next_frame :: () {
         using window.keyboard_state;
         if repeating_key_code != 0 {
             while now >= next_repeat {
-                add_key_event(*events, Key_Event.{.REPEATED, repeating_key});
+                add_key_event(*events, .REPEATED, repeating_key);
                 utf8: [64]u8;
                 append_text(key_text(backend.connection.key_state, repeating_key_code, utf8), *window.text, window.text_buffer);
                 next_repeat += 1.0 / repeat_rate;

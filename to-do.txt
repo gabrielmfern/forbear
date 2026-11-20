@@ -7,8 +7,6 @@
         - We need to at least have command+q working
     - API to set the minimum and maximum sizes of the window
     - API to set the window to full screen
-    - If the forbear program is manipulated by another program on Windows, modifiers don't actually quite work (control+v), for example
-        - Raycast's emoji insertion is what I'm thinking of
 - Documentation
 - Primitives that allow handling focus
     - The main problem around this is the fact that we can't really "consume" an event. Given the UI is immediate and events are consumed as things are rendered, each element must know that some other element is the one that will be consuming the given event. In the Zig version I had a way to handle this, it was 80% as elegant as I'd like but had some awkwardness.
@@ -46,9 +44,8 @@ Big problems that I don't have an answer too:
 Possible programs I can make with forbear next:
 - Merged Twitch and YouTube chat viewer
 - Program that intakes a website with an article, removes all fluff and makes all readable in a consistent way, and then adds in ways for you to add notes, highlight, and add summaries while you read.
-- Program that downloads a documentation website and lets you read it in a consistent UI
 - A simple plotting program like Desmos.
 - Daily to-do list program based on // TO-DO: comments and to-do files
+- Program to create slides, or library based on forbear to do so where you define the slides through code
 - Music playing software for local music, that lets you download and buy music legally
-- Discord alternative with servers and conversations
-- Program to create slides, or library based on forbear to do so where you define the slides as components
+- Discord alternative with servers, text conversation and DMs
