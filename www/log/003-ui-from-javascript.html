@@ -32,6 +32,7 @@
   --color-bright-yellow: #CFBA78;
 }
 @layer base {
+  * { scrollbar-width: thin; scrollbar-color: var(--color-ui) transparent; }
   html { @apply overflow-x-clip; }
   body { @apply bg-bg text-fg leading-relaxed; }
   h1 { @apply text-bright text-3xl font-bold mb-8; }

@@ -9,12 +9,14 @@
 <style type="text/tailwindcss">
 @theme {
   --color-bg: #1C1F23;
+  --color-ui: #2C333B;
   --color-fg: #AEB8C4;
   --color-bright: #FFFFFF;
   --color-yellow: #B8A36A;
   --color-bright-yellow: #CFBA78;
 }
 @layer base {
+  * { scrollbar-width: thin; scrollbar-color: var(--color-ui) transparent; }
   body { @apply bg-bg text-fg leading-relaxed; }
   h1 { @apply text-bright text-3xl font-bold mb-8; }
   p { @apply my-4; }
