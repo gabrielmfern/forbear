@@ -1,4 +1,5 @@
 #include "forbear/forbear.h"
+#include <stdbool.h>
 #include <stdio.h>
 #include <time.h>
 
@@ -116,19 +117,25 @@ void render(void *data) {
     fb_prepare_for_next_frame();
 }
 
-const fb_u8 inter_ttf[] = {
-    #embed "Inter.ttf"
-};
+fb_u8 inter_ttf[1 << 20];
 
 int main(void) {
     timespec_get(&start, TIME_UTC);
+
+    FILE *file = fopen("Inter.ttf", "rb");
+    if (!file) {
+        fprintf(stderr, "Could not open Inter.ttf, run this program from its project folder\n");
+        return 1;
+    }
+    size_t inter_ttf_size = fread(inter_ttf, 1, sizeof(inter_ttf), file);
+    fclose(file);
 
     fb_Backend backend;
     fb_init_backend(&backend);
     fb_Window window;
     fb_init_window(&backend, &window, 800, 600, "quick start", FB_FLOAT64_NAN, FB_FLOAT64_NAN, FB_FLOAT64_NAN, FB_FLOAT64_NAN);
 
-    fb_Font inter = fb_create_font((fb_String){ sizeof(inter_ttf), (fb_u8 *)inter_ttf });
+    fb_Font inter = fb_create_font((fb_String){ inter_ttf_size, inter_ttf });
 
     fb_Forbear forbear;
     fb_init_forbear(&forbear, &backend, &window, FB_BASE_STYLE(

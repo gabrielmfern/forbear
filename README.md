@@ -21,7 +21,7 @@ Major features:
 ## Quickstart
 
 The quickstart asks for a language, Jai or C.
-Jai is in private beta, so if you don't have it, pick C. You need a C23 compiler, such as clang 19 or newer.
+Jai is in private beta, so if you don't have it, pick C. For C, you need MSVC on Windows, or gcc or clang on Linux and macOS.
 
 On Linux or macOS:
 ```sh

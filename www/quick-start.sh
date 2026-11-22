@@ -12,6 +12,17 @@ printf 'Language: %s (%s): ' "$(echo $languages | sed 's/ /, /g')" "$default"
 read -r language < /dev/tty
 language=${language:-$default}
 case " $languages " in *" $language "*) ;; *) echo "Unknown language '$language', expected one of: $languages" >&2; exit 1 ;; esac
+if [ "$language" = c ] && ! command -v cc > /dev/null 2>&1; then
+  if [ "$(uname -s)" = Darwin ]; then
+    echo "No C compiler found. Install one with: xcode-select --install" >&2
+  else
+    echo "No C compiler found. Install gcc or clang with your package manager." >&2
+  fi
+  exit 1
+fi
+if [ "$(uname -s)" = Linux ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+  echo "Warning: forbear needs Wayland on Linux, and WAYLAND_DISPLAY is not set, so your program won't open a window." >&2
+fi
 
 base=https://raw.githubusercontent.com/gabrielmfern/forbear/${FORBEAR_REF:-master}
 release=https://github.com/gabrielmfern/forbear/releases/latest/download

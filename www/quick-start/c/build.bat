@@ -1,6 +1,5 @@
 @echo off
-pushd %~dp0
-clang -std=c23 -g main.c forbear\forbear.lib -o main.exe || goto :end
+setlocal
+cd /D "%~dp0"
+call cl /nologo /FC /Z7 /Od /std:c11 main.c forbear\forbear.lib /link /INCREMENTAL:NO /out:main.exe || exit /b 1
 copy /y forbear\forbear.dll . >nul
-:end
-popd
