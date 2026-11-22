@@ -46,7 +46,8 @@
 <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
-<main class="max-w-2xl mx-auto px-4 py-16">
+<main class="max-w-2xl xl:max-w-[88rem] mx-auto px-4 py-16 xl:grid xl:grid-cols-[42rem_minmax(0,1fr)] xl:grid-rows-[auto_1fr] xl:gap-x-16">
+<div>
 <h1>forbear</h1>
 
 <p>forbear is a high performance, immediate mode GUI library that looks like the web.</p>
@@ -83,16 +84,118 @@
 <pre id="quick-start-unix" role="tabpanel" class="my-0"><code>curl -fsSL https://forbear.dev/quick-start.sh | sh</code></pre>
 <pre id="quick-start-windows" role="tabpanel" hidden class="my-0"><code>irm https://www.forbear.dev/quick-start.ps1 | iex</code></pre>
 </div>
+
+<p>The quick start asks for a language, Jai or C. Jai is in private beta, so if you don't have it, pick C. For C, you need MSVC on Windows, or gcc or clang on Linux and macOS.</p>
+
+<p>forbear runs on Windows, Linux (Wayland) and macOS.</p>
+</div>
+
+<aside class="xl:col-start-2 xl:row-start-1 xl:row-span-2 min-w-0">
+<h2 class="xl:mt-0">At a glance</h2>
+
+<div id="at-a-glance" class="bg-float text-sm rounded-lg my-6">
+<div role="tablist" class="flex gap-4 px-4 pt-3">
+<button role="tab" aria-controls="at-a-glance-jai" aria-selected="true" class="text-muted hover:text-fg aria-selected:text-bright cursor-pointer">Jai</button>
+<button role="tab" aria-controls="at-a-glance-c" aria-selected="false" class="text-muted hover:text-fg aria-selected:text-bright cursor-pointer">C</button>
+</div>
+<pre id="at-a-glance-jai" role="tabpanel" class="my-0"><code><span style="color:#c6b076">Counter </span>:: <span style="color:#9a9da1">() {</span>
+    <span style="color:#7f9a78">// State is stored in a 16MB static buffer with no heap allocations.</span>
+    counter := <span style="color:#c6b076">state</span><span style="color:#9a9da1">(</span><span style="color:#d8dadc">s64</span><span style="color:#9a9da1">);</span>
+
+    <span style="color:#d8dadc">if </span><span style="color:#c6b076">on_key_down</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">.PLUS</span><span style="color:#9a9da1">) {</span>
+        <span style="color:#7f9a78">// Since this is immediate mode, there's no need for callbacks/event handlers,</span>
+        <span style="color:#7f9a78">// we can simply check for the key being down through an if-statement.</span>
+        counter<span style="color:#9a9da1">.</span>* += <span style="color:#7fa0b8">1</span><span style="color:#9a9da1">;</span>
+    <span style="color:#9a9da1">} </span><span style="color:#d8dadc">else if </span><span style="color:#c6b076">on_key_down</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">.MINUS</span><span style="color:#9a9da1">) {</span>
+        counter<span style="color:#9a9da1">.</span>* -= <span style="color:#7fa0b8">1</span><span style="color:#9a9da1">;</span>
+    <span style="color:#9a9da1">}</span>
+
+    <span style="color:#c6b076">element</span><span style="color:#9a9da1">(</span><span style="color:#d8dadc">Style</span><span style="color:#9a9da1">.{</span>
+        <span style="color:#7f9a78">// styling familiar to HTML</span>
+        background    = <span style="color:#c6b076">color</span><span style="color:#9a9da1">(</span><span style="color:#c6b076">rgb</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">44</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">49</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">56</span><span style="color:#9a9da1">)),</span>
+        color         = <span style="color:#c6b076">rgb</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">230</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">234</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">239</span><span style="color:#9a9da1">),</span>
+        border_width  = <span style="color:#c6b076">all</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">1</span><span style="color:#9a9da1">),</span>
+        border_color  = <span style="color:#c6b076">rgb</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">66</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">73</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">82</span><span style="color:#9a9da1">),</span>
+        border_radius = <span style="color:#7fa0b8">6</span><span style="color:#9a9da1">,</span>
+        padding       = <span style="color:#c6b076">in_line</span><span style="color:#9a9da1">(</span><span style="color:#c6b076">block</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">8</span><span style="color:#9a9da1">), </span><span style="color:#7fa0b8">16</span><span style="color:#9a9da1">),</span>
+        margin        = <span style="color:#c6b076">block</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">8</span><span style="color:#9a9da1">),</span>
+    <span style="color:#9a9da1">}, </span><span style="color:#d8dadc">#code </span><span style="color:#9a9da1">{ </span><span style="color:#7f9a78">// The children of an element are defined through passing</span>
+        <span style="color:#7f9a78">// around Code by the `#code` directive.</span>
+        node := <span style="color:#c6b076">get_node</span><span style="color:#9a9da1">();</span>
+        <span style="color:#d8dadc">if </span><span style="color:#c6b076">is_mouse_inside</span><span style="color:#9a9da1">() {</span>
+            node<span style="color:#9a9da1">.</span>style<span style="color:#9a9da1">.</span>background = <span style="color:#c6b076">color</span><span style="color:#9a9da1">(</span><span style="color:#c6b076">rgb</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">56</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">62</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">71</span><span style="color:#9a9da1">));</span>
+            <span style="color:#d8dadc">if </span><span style="color:#c6b076">is_mouse_held</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">.LEFT</span><span style="color:#9a9da1">) </span>|| <span style="color:#c6b076">is_mouse_held</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">.RIGHT</span><span style="color:#9a9da1">) {</span>
+                node<span style="color:#9a9da1">.</span>style<span style="color:#9a9da1">.</span>background = <span style="color:#c6b076">color</span><span style="color:#9a9da1">(</span><span style="color:#c6b076">rgb</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">34</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">38</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">44</span><span style="color:#9a9da1">));</span>
+            <span style="color:#9a9da1">}</span>
+        <span style="color:#9a9da1">}</span>
+
+        <span style="color:#c6b076">text</span><span style="color:#9a9da1">(</span><span style="color:#b8a36a">"Click me"</span><span style="color:#9a9da1">);</span>
+
+        <span style="color:#d8dadc">if </span><span style="color:#c6b076">on_click</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">.LEFT</span><span style="color:#9a9da1">) {</span>
+            counter<span style="color:#9a9da1">.</span>* += <span style="color:#7fa0b8">1</span><span style="color:#9a9da1">;</span>
+        <span style="color:#9a9da1">} </span><span style="color:#d8dadc">else if </span><span style="color:#c6b076">on_click</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">.RIGHT</span><span style="color:#9a9da1">) {</span>
+            counter<span style="color:#9a9da1">.</span>* -= <span style="color:#7fa0b8">1</span><span style="color:#9a9da1">;</span>
+        <span style="color:#9a9da1">}</span>
+    <span style="color:#9a9da1">});</span>
+
+    <span style="color:#c6b076">text</span><span style="color:#9a9da1">(</span><span style="color:#d8dadc">Style</span><span style="color:#9a9da1">.{</span>font_size = <span style="color:#7fa0b8">32</span><span style="color:#9a9da1">}, </span><span style="color:#c6b076">sprint</span><span style="color:#9a9da1">(</span><span style="color:#b8a36a">"Count: %"</span><span style="color:#9a9da1">, </span>counter<span style="color:#9a9da1">.</span>*<span style="color:#9a9da1">));</span>
+<span style="color:#9a9da1">} </span><span style="color:#86a5bf">@component</span></code></pre>
+<pre id="at-a-glance-c" role="tabpanel" hidden class="my-0"><code><span style="color:#d8dadc">void </span><span style="color:#c6b076">Counter</span><span style="color:#9a9da1">(</span><span style="color:#d8dadc">void</span><span style="color:#9a9da1">) {</span>
+    <span style="color:#7f9a78">// State is stored in a 16MB static buffer with no heap allocations.</span>
+    fb_s64 *counter = <span style="color:#c6b076">FB_STATE</span><span style="color:#9a9da1">(</span>fb_s64<span style="color:#9a9da1">);</span>
+
+    <span style="color:#d8dadc">if </span><span style="color:#9a9da1">(</span><span style="color:#c6b076">fb_on_key_down</span><span style="color:#9a9da1">(</span>FB_KEY_PLUS<span style="color:#9a9da1">, </span><span style="color:#7fa0b8">false</span><span style="color:#9a9da1">)) {</span>
+        <span style="color:#7f9a78">// Since this is immediate mode, there's no need for callbacks/event handlers,</span>
+        <span style="color:#7f9a78">// we can simply check for the key being down through an if-statement.</span>
+        *counter += <span style="color:#7fa0b8">1</span><span style="color:#9a9da1">;</span>
+    <span style="color:#9a9da1">} </span><span style="color:#d8dadc">else if </span><span style="color:#9a9da1">(</span><span style="color:#c6b076">fb_on_key_down</span><span style="color:#9a9da1">(</span>FB_KEY_MINUS<span style="color:#9a9da1">, </span><span style="color:#7fa0b8">false</span><span style="color:#9a9da1">)) {</span>
+        *counter -= <span style="color:#7fa0b8">1</span><span style="color:#9a9da1">;</span>
+    <span style="color:#9a9da1">}</span>
+
+    <span style="color:#c6b076">FB_ELEMENT</span><span style="color:#9a9da1">(</span>
+        <span style="color:#7f9a78">// styling familiar to HTML</span>
+        <span style="color:#9a9da1">.</span>background    = <span style="color:#c6b076">fb_color</span><span style="color:#9a9da1">(</span><span style="color:#c6b076">fb_rgb</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">44</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">49</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">56</span><span style="color:#9a9da1">)),</span>
+        <span style="color:#9a9da1">.</span>color         = <span style="color:#c6b076">fb_rgb</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">230</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">234</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">239</span><span style="color:#9a9da1">),</span>
+        <span style="color:#9a9da1">.</span>border_width  = <span style="color:#c6b076">fb_all_sides</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">1</span><span style="color:#9a9da1">),</span>
+        <span style="color:#9a9da1">.</span>border_color  = <span style="color:#c6b076">fb_rgb</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">66</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">73</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">82</span><span style="color:#9a9da1">),</span>
+        <span style="color:#9a9da1">.</span>border_radius = <span style="color:#7fa0b8">6</span><span style="color:#9a9da1">,</span>
+        <span style="color:#9a9da1">.</span>padding       = <span style="color:#c6b076">fb_with_in_line_sides</span><span style="color:#9a9da1">(</span><span style="color:#c6b076">fb_block_sides</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">8</span><span style="color:#9a9da1">), </span><span style="color:#7fa0b8">16</span><span style="color:#9a9da1">),</span>
+        <span style="color:#9a9da1">.</span>margin        = <span style="color:#c6b076">fb_block_sides</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">8</span><span style="color:#9a9da1">),</span>
+    <span style="color:#9a9da1">) { </span><span style="color:#7f9a78">// The children of an element go inside the block that follows FB_ELEMENT.</span>
+        fb_Node *node = <span style="color:#c6b076">fb_get_node</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">-1</span><span style="color:#9a9da1">);</span>
+        <span style="color:#d8dadc">if </span><span style="color:#9a9da1">(</span><span style="color:#c6b076">fb_is_mouse_inside</span><span style="color:#9a9da1">()) {</span>
+            node-&gt;style<span style="color:#9a9da1">.</span>background = <span style="color:#c6b076">fb_color</span><span style="color:#9a9da1">(</span><span style="color:#c6b076">fb_rgb</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">56</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">62</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">71</span><span style="color:#9a9da1">));</span>
+            <span style="color:#d8dadc">if </span><span style="color:#9a9da1">(</span><span style="color:#c6b076">fb_is_mouse_held</span><span style="color:#9a9da1">(</span>FB_MOUSE_BUTTON_LEFT<span style="color:#9a9da1">) </span>|| <span style="color:#c6b076">fb_is_mouse_held</span><span style="color:#9a9da1">(</span>FB_MOUSE_BUTTON_RIGHT<span style="color:#9a9da1">)) {</span>
+                node-&gt;style<span style="color:#9a9da1">.</span>background = <span style="color:#c6b076">fb_color</span><span style="color:#9a9da1">(</span><span style="color:#c6b076">fb_rgb</span><span style="color:#9a9da1">(</span><span style="color:#7fa0b8">34</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">38</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">44</span><span style="color:#9a9da1">));</span>
+            <span style="color:#9a9da1">}</span>
+        <span style="color:#9a9da1">}</span>
+
+        <span style="color:#c6b076">FB_TEXT</span><span style="color:#9a9da1">(</span><span style="color:#b8a36a">"Click me"</span><span style="color:#9a9da1">);</span>
+
+        <span style="color:#d8dadc">if </span><span style="color:#9a9da1">(</span><span style="color:#c6b076">fb_on_click</span><span style="color:#9a9da1">(</span>FB_MOUSE_BUTTON_LEFT<span style="color:#9a9da1">, </span><span style="color:#7fa0b8">true</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">false</span><span style="color:#9a9da1">)) {</span>
+            *counter += <span style="color:#7fa0b8">1</span><span style="color:#9a9da1">;</span>
+        <span style="color:#9a9da1">} </span><span style="color:#d8dadc">else if </span><span style="color:#9a9da1">(</span><span style="color:#c6b076">fb_on_click</span><span style="color:#9a9da1">(</span>FB_MOUSE_BUTTON_RIGHT<span style="color:#9a9da1">, </span><span style="color:#7fa0b8">true</span><span style="color:#9a9da1">, </span><span style="color:#7fa0b8">false</span><span style="color:#9a9da1">)) {</span>
+            *counter -= <span style="color:#7fa0b8">1</span><span style="color:#9a9da1">;</span>
+        <span style="color:#9a9da1">}</span>
+    <span style="color:#9a9da1">}</span>
+
+    <span style="color:#d8dadc">char </span>count_text<span style="color:#9a9da1">[</span><span style="color:#7fa0b8">64</span><span style="color:#9a9da1">];</span>
+    <span style="color:#c6b076">snprintf</span><span style="color:#9a9da1">(</span>count_text<span style="color:#9a9da1">, </span><span style="color:#d8dadc">sizeof</span><span style="color:#9a9da1">(</span>count_text<span style="color:#9a9da1">), </span><span style="color:#b8a36a">"Count: %lld"</span><span style="color:#9a9da1">, (</span><span style="color:#d8dadc">long long</span><span style="color:#9a9da1">)</span>*counter<span style="color:#9a9da1">);</span>
+    <span style="color:#c6b076">FB_TEXT</span><span style="color:#9a9da1">(</span>count_text<span style="color:#9a9da1">, .</span>font_size = <span style="color:#7fa0b8">32</span><span style="color:#9a9da1">);</span>
+<span style="color:#9a9da1">}</span>
+<span style="color:#7f9a78">// Call it as `FB_SCOPE Counter();` to give it its own state.</span></code></pre>
+</div>
+</aside>
+
 <script>
-  const quickStartTabs = document.querySelectorAll('#quick-start [role=tab]');
-  function showQuickStart(name) {
-    for (const tab of quickStartTabs) {
-      tab.setAttribute('aria-selected', tab.dataset.tab === name);
-      document.getElementById(tab.getAttribute('aria-controls')).hidden = tab.dataset.tab !== name;
+  function showTab(selected) {
+    for (const tab of selected.parentElement.children) {
+      tab.setAttribute('aria-selected', tab === selected);
+      document.getElementById(tab.getAttribute('aria-controls')).hidden = tab !== selected;
     }
   }
-  for (const tab of quickStartTabs) tab.onclick = () => showQuickStart(tab.dataset.tab);
-  if (/^win/i.test(navigator.userAgentData?.platform ?? navigator.platform)) showQuickStart('windows');
+  for (const tab of document.querySelectorAll('[role=tab]')) tab.onclick = () => showTab(tab);
+  if (/^win/i.test(navigator.userAgentData?.platform ?? navigator.platform)) showTab(document.querySelector('[data-tab=windows]'));
   document.getElementById('quick-start-copy').onclick = async (event) => {
     await navigator.clipboard.writeText(document.querySelector('#quick-start [role=tabpanel]:not([hidden])').textContent);
     event.target.textContent = 'copied';
@@ -100,9 +203,7 @@
   };
 </script>
 
-<p>The quick start asks for a language, Jai or C. Jai is in private beta, so if you don't have it, pick C. For C, you need MSVC on Windows, or gcc or clang on Linux and macOS.</p>
-
-<p>forbear runs on Windows, Linux (Wayland) and macOS.</p>
+<div class="xl:col-start-1">
 
 <h2>License</h2>
 
@@ -132,6 +233,7 @@ or nonprofits.</p>
 </ul>
 
 <script src="/assets/subscribe.js"></script>
+</div>
 
 </main>
 </body>
