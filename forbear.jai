@@ -3688,7 +3688,7 @@ node_pool :: () -> Allocator {
         }
     }
     if pool_slot == -1 {
-        for *slot: pool_slots {
+        for *slot: pool_slots.* {
             if !slot.used {
                 pool_slot = it_index;
                 if slot.pool.memory_base == null {
@@ -3703,18 +3703,18 @@ node_pool :: () -> Allocator {
     }
     if pool_slot == -1 {
         log_error(#string END
-There are no more pool slots available (256). This means one of three things:
+There are no more pool slots available (%). This means one of three things:
 1) you have a bug in your code using more pools than you need;
 2) you're abusing pools, and you should not;
-3) we should increase our pool count to more than 256.
+3) we should increase our pool count to more than %.
 
 If you think it is 3), get in touch with us to know if we should.
-END);
+END, pool_slots.count, pool_slots.count);
         exit(-1);
     }
     node.pool_slot = pool_slot;
-    pool_slots[node.pool_slot].last_frame = frame;
-    return pool_slots[node.pool_slot].allocator;
+    pool_slots.*[node.pool_slot].last_frame = frame;
+    return pool_slots.*[node.pool_slot].allocator;
 }
 state :: (initial_size: s64, initial: *void) -> *void, first_frame: bool {
     using context.forbear;
@@ -5162,6 +5162,7 @@ shape_text :: (style: Complete_Style, text: string) -> Shaping_Run {
 }
 
 static_state_buffers: [2][16 * 1024 * 1024]u8 #align 16;
+static_pool_slots:    [256]Pool_Slot;
 Forbear :: struct {
     persistent_allocator: Allocator;
     node_tree:            Node_Tree;
@@ -5177,7 +5178,7 @@ Forbear :: struct {
 
     state_buffers := *static_state_buffers; // taking a pointer here makes this thread-safe, but
     // also lets us keep it in static memory
-    pool_slots:    [256]Pool_Slot;
+    pool_slots    := *static_pool_slots;
     state_current: s64;
     state_used:    s64;
 
@@ -6361,7 +6362,8 @@ prepare_for_next_frame :: () {
         reset(*shaping_caches[shaping_cache_current].pool);
     }
 
-    for *slot: pool_slots {
+    for *slot: pool_slots.* {
+        if slot.pool.memory_base == null  break;
         if slot.used && slot.last_frame != frame {
             if slot.pool.current_point != slot.pool.memory_base {
                 #if OS == .WINDOWS {
