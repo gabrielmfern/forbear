@@ -1,6 +1,6 @@
 MEMORY_DEBUGGING :: false;
 
-BUILD_FLAGS :: "-output_path .build +forbear";
+BUILD_FLAGS :: "-output_path .build +forbear +Iprof -modules";
 
 #import "Basic"()(MEMORY_DEBUGGER = MEMORY_DEBUGGING);
 #import "File";
@@ -125,6 +125,9 @@ END);
         memory_visualizer_per_frame_update();
     }
     reset(*frame_pool);
+    #if #exists(__Iprof) {
+        context._Iprof.update(true);
+    }
 }
 
 main :: () {
