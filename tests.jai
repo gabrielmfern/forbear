@@ -190,7 +190,7 @@ main :: () {
                     if lines.count > 0  lines[lines.count - 1].text = builder_to_string(*builder);
                     array_add(*lines, .{ start_x = position.x });
                 }
-                append(*builder, to_string(glyph.utf8.Encoded.data, glyph.utf8.EncodedLength));
+                append(*builder, to_string(node.shaping_run.text.data + glyph.index_into_original_text, 1));
                 lines[lines.count - 1].end_x = position.x + glyph.advance.x;
             }
             if lines.count > 0  lines[lines.count - 1].text = builder_to_string(*builder);
@@ -285,19 +285,33 @@ main :: () {
         //
         CACHED :: "cached across frames";
         expected_glyphs: [..]s32;
+        over_budget := alloc_string(Shaping_Cache.BUDGET / size_of(Glyph) + 1);
+        memset(over_budget.data, #char "a", over_budget.count);
+        first_cache: s64;
         test_frame("shaping cache: shaping text for the first time", #code {
+            first_cache = context.forbear.shaping_cache_current;
             index := text(CACHED);
             for context.forbear.node_tree[index].shaping_run.glyphs  array_add(*expected_glyphs, it.index);
+            text(over_budget);
         });
-        test_frame("shaping cache: carrying a run over from the previous frame", #code {
+        test_frame("shaping cache: carrying a run over from the previous cache", #code {
+            assert(context.forbear.shaping_cache_current != first_cache, "expected going over budget to swap caches");
             text(CACHED);
+            text(over_budget);
         });
         test_frame("shaping cache: a run carried over twice survives new text shaped into the reused pool", #code {
+            assert(context.forbear.shaping_cache_current == first_cache, "expected the first cache to be reused");
             for 0..20  text("different text number % to fill the pool", it);
             index := text(CACHED);
             glyphs := context.forbear.node_tree[index].shaping_run.glyphs;
             assert(glyphs.count == expected_glyphs.count, "expected % glyphs, got %", expected_glyphs.count, glyphs.count);
             for glyphs  assert(it.index == expected_glyphs[it_index], "glyph %: expected index %, got %", it_index, expected_glyphs[it_index], it.index);
+        });
+        test_frame("shaping cache: line heights less than a font unit apart get their own runs", #code {
+            a := text(Style.{ line_height = line_height_percentage(1.0) }, CACHED);
+            b := text(Style.{ line_height = line_height_percentage(1.0001) }, CACHED);
+            tree := context.forbear.node_tree;
+            assert(tree[a].shaping_run.line_height != tree[b].shaping_run.line_height, "expected different line heights, both got %", tree[a].shaping_run.line_height);
         });
     }
 }
