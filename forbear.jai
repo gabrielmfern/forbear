@@ -3838,6 +3838,16 @@ schedule_scroll :: (state: *Scrolling_State, position: Vector2, animate := false
     state.scheduled_scroll.position           = position;
     state.scheduled_scroll.animate            = animate;
 }
+use_scrolling :: () {
+    scrolling_state := state(Scrolling_State);
+    scrolling_container := get_node();
+    if scrolling_container != null {
+        use_scrolling(scrolling_state);
+        scrolling_container.style.children_offset = -scrolling_state.effective_offset;
+    } else {
+        log_error("use_scrolling won't work unless it receives a state itself, or is inside a node that's meant to be the scrolling container.");
+    }
+} @hook
 // TO-DO: This must be able to handle choosing between all nodes that can scroll to scroll only one of them.
 //
 // Besides only scrolling one of them, once one scrolling container is done with the scrolling and the user keeps
