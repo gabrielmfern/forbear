@@ -3607,12 +3607,12 @@ Node :: struct {
     max_size: Vector2 = Vector2.{FLOAT32_INFINITY, FLOAT32_INFINITY};
     z:        u16;
 
-    first_child:      s64    = -1;
-    last_child:       s64    = -1;
-    next_sibling:     s64    = -1;
-    previous_sibling: s64    = -1;
-    parent:           s64    = -1;
-    glyphs:           Glyphs;
+    first_child:      s64         = -1;
+    last_child:       s64         = -1;
+    next_sibling:     s64         = -1;
+    previous_sibling: s64         = -1;
+    parent:           s64         = -1;
+    shaping_run:      Shaping_Run;
 
     style: Complete_Style;
 
@@ -4656,43 +4656,6 @@ scope :: ($body: Code, location := #caller_location) -> body.type #expand {
     return close_scope(open_scope(location = location), #insert body);
 }
 
-Glyph :: struct {
-    index: s32;
-    index_into_original_text: s64;
-    utf8: kbts_encode_utf8;
-    starts_word: bool;
-    can_wrap_before: bool;
-
-    // All of these are in points units, that means they do not account for the font size, but they do account for the font weight.
-    position: Vector2;
-    // Meant for the recalculation of the glyphs position if that's required at some other laying out step
-    advance: Vector2;
-    // Meant for the recalculation of the glyphs position if that's required at some other laying out step
-    offset: Vector2;
-};
-Glyphs :: struct {
-    hash: u64;
-    length: s32;
-    array: [..]Glyph;
-    pre_break_indices: [..]s64;
-
-    //
-    // All the properties bellow are in font point units. This means they do not account for the font size, but they do account
-    // for the font weight.
-    //
-
-    // Distance from line top to the shared baseline
-    ascent: float;
-    line_height: float;
-    min_size: Vector2;
-    max_size: Vector2;
-};
-Glyph_Atlas_Entry :: struct {
-    bearing: Vector2;
-    size:    Vector2;
-    uv_min:  Vector2;
-    uv_max:  Vector2;
-};
 // A cache page
 // Shaping_Cache :: struct {
 //     slots: [4096]Glyphs;
@@ -4741,15 +4704,6 @@ init_font :: (using font: *Font) {
     shaping_font = kbts_FontFromMemory(memory.data, xx memory.count, 0, null, null);
     assert(kbts_FontIsValid(*shaping_font) != 0);
 }
-Raster_Glyph :: struct {
-    // Might be null
-    bitmap: string;
-    left: s32;
-    top: s32;
-    width: u32;
-    height: u32;
-    pitch: s32;
-};
 set_weight :: (font: *Font, weight: u16) {
     // TO-DO: cache that this was already set so that we can avoid work
     mm: *FT_MM_Var;
@@ -4793,6 +4747,15 @@ get_font_units_to_pixel :: (font: *Font, font_size: float) -> float {
     rounded_font_size := round_font_size(font_size * scale);
     return (cast(float) rounded_font_size) / (cast(float) font.raster_face.units_per_EM) / scale;
 }
+Raster_Glyph :: struct {
+    // Might be null
+    bitmap: string;
+    left:   s32;
+    top:    s32;
+    width:  u32;
+    height: u32;
+    pitch:  s32;
+};
 font_raster_glyph :: (font: *Font, glyph_index: u16, subpixel_bin: s32) -> Raster_Glyph {
     FT_LOAD_TARGET_LIGHT :: 1 << 16;
     hinting: s32 = xx ifx context.forbear.window.scale >= 2 then FT_LOAD_NO_HINTING else FT_LOAD_TARGET_LIGHT;
@@ -4814,11 +4777,42 @@ font_raster_glyph :: (font: *Font, glyph_index: u16, subpixel_bin: s32) -> Raste
     raster_glyph.pitch = glyph.bitmap.pitch;
     return raster_glyph;
 }
-shape_text :: (style: Complete_Style, content: string) -> Glyphs {
+Glyph :: struct {
+    index:                    s32;
+    index_into_original_text: s64;
+    utf8:                     kbts_encode_utf8;
+    starts_word:              bool;
+    can_wrap_before:          bool;
+
+    // All of these are in points units, that means they do not account for the font size, but they do account for the font weight.
+    position: Vector2;
+    // Meant for the recalculation of the glyphs position if that's required at some other laying out step
+    advance:  Vector2;
+    // Meant for the recalculation of the glyphs position if that's required at some other laying out step
+    offset:   Vector2;
+};
+Shaping_Run :: struct {
+    hash:              u64;
+    length:            s32;
+    array:             [..]Glyph;
+    pre_break_indices: [..]s64;
+
+    //
+    // All the properties bellow are in font point units. This means they do not account for the font size, but they do account
+    // for the font weight.
+    //
+
+    // Distance from line top to the shared baseline
+    ascent:      float;
+    line_height: float;
+    min_size:    Vector2;
+    max_size:    Vector2;
+};
+shape_text :: (style: Complete_Style, text: string) -> Shaping_Run {
     // TO-DO(next): cache these shaped glyphs arrays for the given text so that we can reuse it in between frames
     font := style.font;
     text_wrapping := style.text_wrapping;
-    glyphs: Glyphs;
+    glyphs: Shaping_Run;
     font_line_height := cast(float) font.raster_face.height;
     if #complete style.line_height.kind == {
         case .PERCENTAGE;
@@ -4841,8 +4835,8 @@ shape_text :: (style: Complete_Style, content: string) -> Glyphs {
     kbts_ShapeBegin(context.forbear.shaping_context, xx style.text_direction, xx style.language);
     kbts_ShapeUtf8(
         context.forbear.shaping_context,
-        content.data,
-        xx content.count,
+        text.data,
+        xx text.count,
         xx kbts_user_id_generation_mode_enum.KBTS_USER_ID_GENERATION_MODE_SOURCE_INDEX
     );
     if font.weight != U16_MAX {
@@ -4916,11 +4910,11 @@ set_node_glyphs :: (node: *Node, content: string) {
     rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
     set_weight(node.style.font, node.style.font_weight);
     set_font_size(node.style.font, rounded_font_size);
-    node.glyphs          = shape_text(node.style, content);
+    node.shaping_run          = shape_text(node.style, content);
     font_units_to_point := get_font_units_to_pixel(node.style.font, node.style.font_size);
-    node.size            = Vector2.{node.glyphs.max_size.x, node.glyphs.min_size.y} * font_units_to_point;
-    node.min_size        = node.glyphs.min_size * font_units_to_point;
-    node.max_size        = node.glyphs.max_size * font_units_to_point;
+    node.size            = Vector2.{node.shaping_run.max_size.x, node.shaping_run.min_size.y} * font_units_to_point;
+    node.min_size        = node.shaping_run.min_size * font_units_to_point;
+    node.max_size        = node.shaping_run.max_size * font_units_to_point;
 
     if node.parent != -1 {
         parent := context.forbear.node_tree[node.parent];
@@ -4949,6 +4943,12 @@ text :: (style: Style, format: string, args: ..Any, key := "", location := #call
 text :: (format: string, args: ..Any, key := "", location := #caller_location) -> s64 #expand {
     return text(Style.{}, format, ..args, key = key, location = location);
 }
+Glyph_Atlas_Entry :: struct {
+    bearing: Vector2;
+    size:    Vector2;
+    uv_min:  Vector2;
+    uv_max:  Vector2;
+};
 Glyph_Atlas :: struct {
     texture: u32;
     table: Table(u64, Glyph_Atlas_Entry);
@@ -5025,11 +5025,11 @@ glyph_atlas_fill :: () -> bool {
         glyph_atlas_reset(*glyph_atlas);
         glyph_atlas.scale = window.scale;
     }
-    for node: node_tree if node.kind == .ELEMENT && node.glyphs.array.count != 0 {
+    for node: node_tree if node.kind == .ELEMENT && node.shaping_run.array.count != 0 {
         scale := cast(float) window.scale;
         rounded_font_size := round_font_size(node.style.font_size * scale);
         font_units_to_point := get_font_units_to_pixel(node.style.font, node.style.font_size);
-        for glyph: node.glyphs.array {
+        for glyph: node.shaping_run.array {
             _, subpixel_bin := glyph_subpixel_x(node.position.x, glyph.position.x, font_units_to_point, scale);
             atlas_key := glyph_cache_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight, subpixel_bin);
             if table_find_pointer(*glyph_atlas.table, atlas_key) != null  continue;
@@ -5382,7 +5382,7 @@ layout :: () {
             //
             // ==== fitting nodes ====
             //
-            for <*node: node_tree if node.kind == .ELEMENT && node.first_child != -1 && node.glyphs.array.count == 0 {
+            for <*node: node_tree if node.kind == .ELEMENT && node.first_child != -1 && node.shaping_run.array.count == 0 {
                 if node.style.width.kind == .FIT {
                     node.size.x = fitting_base(node, .HORIZONTAL);
                 }
@@ -5430,7 +5430,7 @@ layout :: () {
                         node.size.y = (cast(float) window.height) / (cast(float) window.scale);
                     }
                 }
-                if node.first_child != -1 && node.glyphs.array.count == 0 {
+                if node.first_child != -1 && node.shaping_run.array.count == 0 {
                     array_reset_keeping_memory(*changing);
                     layout_direction := node.style.direction;
                     opposite_direction := opposite(layout_direction);
@@ -5627,8 +5627,8 @@ layout :: () {
                     node.style.border_width.y.x + node.style.padding.y.x,
                 } / font_units_to_point;
 
-                if node.glyphs.array.count > 0 && node.style.text_wrapping != .NONE {
-                    using node.glyphs;
+                if node.shaping_run.array.count > 0 && node.style.text_wrapping != .NONE {
+                    using node.shaping_run;
 
                     Line :: struct {
                         start: s64;
@@ -5763,7 +5763,7 @@ layout :: () {
             // ==== refit heights ====
             //
             for <*node: node_tree if node.kind == .ELEMENT {
-                if node.first_child != -1 && node.glyphs.array.count == 0 {
+                if node.first_child != -1 && node.shaping_run.array.count == 0 {
                     if node.style.height.kind == .FIT {
                         node.size.y = fitting_base(node, .VERTICAL);
                     }
@@ -5793,7 +5793,7 @@ layout :: () {
                         node.size.y = (cast(float) window.height) / (cast(float) window.scale);
                     }
                 }
-                if node.first_child != -1 && node.glyphs.array.count == 0 {
+                if node.first_child != -1 && node.shaping_run.array.count == 0 {
                     array_reset_keeping_memory(*changing);
                     layout_direction := node.style.direction;
                     opposite_direction := opposite(layout_direction);
@@ -6073,8 +6073,8 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
         if node.z >= z_buckets.count {
             array_resize(*z_buckets, node.z + 1);
         }
-        z_buckets[node.z] += xx (1 + node.glyphs.array.count);
-        instance_count += 1 + node.glyphs.array.count;
+        z_buckets[node.z] += xx (1 + node.shaping_run.array.count);
+        instance_count += 1 + node.shaping_run.array.count;
     }
 
     draw_instances := NewArray(instance_count, Draw_Instance, false);
@@ -6110,12 +6110,12 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
         draw_instances[z_buckets[instance.z]] = instance;
         z_buckets[instance.z] += 1;
 
-        if node.glyphs.array.count != 0 {
+        if node.shaping_run.array.count != 0 {
             scale := cast(float) window.scale;
             rounded_font_size := round_font_size(node.style.font_size * scale);
             font_units_to_point := get_font_units_to_pixel(node.style.font, node.style.font_size);
 
-            for glyph: node.glyphs.array {
+            for glyph: node.shaping_run.array {
                 pixel_x, subpixel_bin := glyph_subpixel_x(node.position.x, glyph.position.x, font_units_to_point, scale);
                 atlas_key := glyph_cache_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight, subpixel_bin);
                 entry := table_find_pointer(*glyph_atlas.table, atlas_key);
@@ -6127,7 +6127,7 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
                 // counted in the z buckets though, so it's left with no size
                 if entry != null {
                     using instance;
-                    baseline_y := node.position.y + (node.glyphs.ascent + glyph.position.y) * font_units_to_point;
+                    baseline_y := node.position.y + (node.shaping_run.ascent + glyph.position.y) * font_units_to_point;
                     position.x = (pixel_x + entry.bearing.x) / scale;
                     position.y = (floor(baseline_y * scale + 0.5) + entry.bearing.y) / scale;
                     size = entry.size / scale;

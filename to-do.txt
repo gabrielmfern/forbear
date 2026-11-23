@@ -53,8 +53,8 @@
 Big problems that I don't have an answer to:
 - Async
 - Hot reloading
-    - This is particularly important for the DX of building something like this with a native language. This is trivial
-      for interpreted languages such as JavaScript, which is quite convenient.
+    - This is particularly important for the DX of building GUI programs. This is trivial for interpreted languages such
+      as JavaScript, which is quite convenient.
 - How to draw arbitrary things
 - Context
 - Lay out animations
