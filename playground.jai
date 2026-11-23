@@ -49,15 +49,19 @@ render :: (data: *void) {
     defer prepare_for_next_frame();
 
     element(Style.{
-        width = grow(),
-        height = grow(),
-        background = color(rgb(28, 31, 35)),
-        color = rgb(174, 184, 196),
-        font_size = 14,
-        padding = all(16),
-        text_wrapping = .CHARACTER,
-        direction = .VERTICAL,
+        width           = grow(),
+        height          = grow(),
+        background      = color(rgb(28, 31, 35)),
+        color           = rgb(174, 184, 196),
+        font_size       = 14,
+        padding         = all(16),
+        text_wrapping   = .CHARACTER,
+        direction       = .VERTICAL,
     }, #code {
+        use_scrolling();
+
+        input := state([..]u8);
+
         Fps_Monitor();
 
         element(Style.{
@@ -73,8 +77,6 @@ render :: (data: *void) {
                 node.style.background = color(rgb(100, 100, 0));
             }
         });
-
-        input := state([..]u8);
 
         frame_input := get_text_input();
         if frame_input.count > 0 {
@@ -105,6 +107,14 @@ render :: (data: *void) {
                 text("% %", label, count.*);
             });
         }
+
+        text(Style.{ text_wrapping = .WORD }, #string END
+Sam: Tá tudo errado. Por direito, a gente nem devia estar aqui. Mas estamos. É tipo nas grandes histórias, Sr. Frodo. Aquelas que realmente importavam. Cheias de escuridão e perigo, eram elas, e às vezes você nem queria saber o final. Porque como o final poderia ser feliz? Como o mundo poderia voltar a ser como era, depois de tanta coisa ruim? Mas no fim, é só uma coisa passageira, essa sombra. Até a escuridão tem que passar. Um novo dia vai chegar. E quando o sol brilhar, vai brilhar mais forte. Essas eram as histórias que ficavam com você. Que significavam alguma coisa. Mesmo que você fosse pequeno demais pra entender o porquê. Mas eu acho, Sr. Frodo, que eu entendo. Eu sei agora. O povo nessas histórias tinha várias chances de voltar atrás, mas não voltava. Porque eles estavam se agarrando a alguma coisa.
+
+Frodo: O que a gente tá se agarrando, Sam?
+
+Sam: Que existe um pouco de bondade nesse mundo, Sr. Frodo. E que vale a pena lutar por ela.
+END);
     });
 
     layout();
