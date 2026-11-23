@@ -1003,12 +1003,21 @@ _Static_assert(FB_OFFSETOF(fb_Complete_Style, x_justification) == 261, "fb_Compl
 _Static_assert(FB_OFFSETOF(fb_Complete_Style, y_justification) == 262, "fb_Complete_Style.y_justification");
 
 typedef struct fb_Forbear fb_Forbear;
+typedef struct fb_Allocator fb_Allocator;
+struct fb_Allocator {
+    _Alignas(8) fb_u8 proc[8];
+    void * data;
+};
+_Static_assert(sizeof(fb_Allocator) == 16, "fb_Allocator");
+_Static_assert(FB_OFFSETOF(fb_Allocator, proc) == 0, "fb_Allocator.proc");
+_Static_assert(FB_OFFSETOF(fb_Allocator, data) == 8, "fb_Allocator.data");
+
 typedef struct fb_Node fb_Node;
 typedef fb_u8 fb_Node_Kind;
 #define FB_NODE_KIND_ELEMENT 0
 #define FB_NODE_KIND_SCOPE 1
 
-typedef struct fb_Glyphs fb_Glyphs;
+typedef struct fb_Shaping_Run fb_Shaping_Run;
 typedef struct fb_Glyph fb_Glyph;
 typedef struct fb_kbts_encode_utf8 fb_kbts_encode_utf8;
 struct fb_kbts_encode_utf8 {
@@ -1041,38 +1050,31 @@ _Static_assert(FB_OFFSETOF(fb_Glyph, position) == 32, "fb_Glyph.position");
 _Static_assert(FB_OFFSETOF(fb_Glyph, advance) == 40, "fb_Glyph.advance");
 _Static_assert(FB_OFFSETOF(fb_Glyph, offset) == 48, "fb_Glyph.offset");
 
-typedef struct fb_Allocator fb_Allocator;
-struct fb_Allocator {
-    _Alignas(8) fb_u8 proc[8];
-    void * data;
-};
-_Static_assert(sizeof(fb_Allocator) == 16, "fb_Allocator");
-_Static_assert(FB_OFFSETOF(fb_Allocator, proc) == 0, "fb_Allocator.proc");
-_Static_assert(FB_OFFSETOF(fb_Allocator, data) == 8, "fb_Allocator.data");
-
 typedef struct { fb_s64 count; fb_Glyph *data; fb_s64 allocated; fb_Allocator allocator; } fb_Array_Glyph;
 
 typedef struct { fb_s64 count; fb_s64 *data; fb_s64 allocated; fb_Allocator allocator; } fb_Array_s64;
 
-struct fb_Glyphs {
+struct fb_Shaping_Run {
     fb_u64 hash;
     fb_s32 length;
-    fb_Array_Glyph array;
+    fb_Array_Glyph glyphs;
     fb_Array_s64 pre_break_indices;
     float ascent;
     float line_height;
     fb_Vector2 min_size;
     fb_Vector2 max_size;
 };
-_Static_assert(sizeof(fb_Glyphs) == 120, "fb_Glyphs");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, hash) == 0, "fb_Glyphs.hash");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, length) == 8, "fb_Glyphs.length");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, array) == 16, "fb_Glyphs.array");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, pre_break_indices) == 56, "fb_Glyphs.pre_break_indices");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, ascent) == 96, "fb_Glyphs.ascent");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, line_height) == 100, "fb_Glyphs.line_height");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, min_size) == 104, "fb_Glyphs.min_size");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, max_size) == 112, "fb_Glyphs.max_size");
+_Static_assert(sizeof(fb_Shaping_Run) == 120, "fb_Shaping_Run");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, hash) == 0, "fb_Shaping_Run.hash");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, length) == 8, "fb_Shaping_Run.length");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, glyphs) == 16, "fb_Shaping_Run.glyphs");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, pre_break_indices) == 56, "fb_Shaping_Run.pre_break_indices");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, ascent) == 96, "fb_Shaping_Run.ascent");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, line_height) == 100, "fb_Shaping_Run.line_height");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, min_size) == 104, "fb_Shaping_Run.min_size");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, max_size) == 112, "fb_Shaping_Run.max_size");
+
+typedef struct { fb_s64 count; fb_Vector2 *data; } fb_View_Vector2;
 
 struct fb_Node {
     fb_Node_Kind kind;
@@ -1086,7 +1088,8 @@ struct fb_Node {
     fb_s64 next_sibling;
     fb_s64 previous_sibling;
     fb_s64 parent;
-    fb_Glyphs glyphs;
+    fb_Shaping_Run shaping_run;
+    fb_View_Vector2 glyph_positions;
     fb_Complete_Style style;
     fb_Vector2 content_size;
     fb_Vector4 clipping_rectangle;
@@ -1096,7 +1099,7 @@ struct fb_Node {
     fb_u64 key;
     void * tree;
 };
-_Static_assert(sizeof(fb_Node) == 528, "fb_Node");
+_Static_assert(sizeof(fb_Node) == 544, "fb_Node");
 _Static_assert(FB_OFFSETOF(fb_Node, kind) == 0, "fb_Node.kind");
 _Static_assert(FB_OFFSETOF(fb_Node, size) == 4, "fb_Node.size");
 _Static_assert(FB_OFFSETOF(fb_Node, position) == 12, "fb_Node.position");
@@ -1108,15 +1111,16 @@ _Static_assert(FB_OFFSETOF(fb_Node, last_child) == 48, "fb_Node.last_child");
 _Static_assert(FB_OFFSETOF(fb_Node, next_sibling) == 56, "fb_Node.next_sibling");
 _Static_assert(FB_OFFSETOF(fb_Node, previous_sibling) == 64, "fb_Node.previous_sibling");
 _Static_assert(FB_OFFSETOF(fb_Node, parent) == 72, "fb_Node.parent");
-_Static_assert(FB_OFFSETOF(fb_Node, glyphs) == 80, "fb_Node.glyphs");
-_Static_assert(FB_OFFSETOF(fb_Node, style) == 200, "fb_Node.style");
-_Static_assert(FB_OFFSETOF(fb_Node, content_size) == 464, "fb_Node.content_size");
-_Static_assert(FB_OFFSETOF(fb_Node, clipping_rectangle) == 472, "fb_Node.clipping_rectangle");
-_Static_assert(FB_OFFSETOF(fb_Node, state_offset) == 488, "fb_Node.state_offset");
-_Static_assert(FB_OFFSETOF(fb_Node, state_size) == 496, "fb_Node.state_size");
-_Static_assert(FB_OFFSETOF(fb_Node, pool_slot) == 504, "fb_Node.pool_slot");
-_Static_assert(FB_OFFSETOF(fb_Node, key) == 512, "fb_Node.key");
-_Static_assert(FB_OFFSETOF(fb_Node, tree) == 520, "fb_Node.tree");
+_Static_assert(FB_OFFSETOF(fb_Node, shaping_run) == 80, "fb_Node.shaping_run");
+_Static_assert(FB_OFFSETOF(fb_Node, glyph_positions) == 200, "fb_Node.glyph_positions");
+_Static_assert(FB_OFFSETOF(fb_Node, style) == 216, "fb_Node.style");
+_Static_assert(FB_OFFSETOF(fb_Node, content_size) == 480, "fb_Node.content_size");
+_Static_assert(FB_OFFSETOF(fb_Node, clipping_rectangle) == 488, "fb_Node.clipping_rectangle");
+_Static_assert(FB_OFFSETOF(fb_Node, state_offset) == 504, "fb_Node.state_offset");
+_Static_assert(FB_OFFSETOF(fb_Node, state_size) == 512, "fb_Node.state_size");
+_Static_assert(FB_OFFSETOF(fb_Node, pool_slot) == 520, "fb_Node.pool_slot");
+_Static_assert(FB_OFFSETOF(fb_Node, key) == 528, "fb_Node.key");
+_Static_assert(FB_OFFSETOF(fb_Node, tree) == 536, "fb_Node.tree");
 
 typedef struct { fb_s64 count; fb_Node *data; fb_s64 allocated; fb_Allocator allocator; } fb_Array_Node;
 
@@ -1155,6 +1159,17 @@ _Static_assert(FB_OFFSETOF(fb_Pool_Slot, pool) == 0, "fb_Pool_Slot.pool");
 _Static_assert(FB_OFFSETOF(fb_Pool_Slot, allocator) == 40, "fb_Pool_Slot.allocator");
 _Static_assert(FB_OFFSETOF(fb_Pool_Slot, last_frame) == 56, "fb_Pool_Slot.last_frame");
 _Static_assert(FB_OFFSETOF(fb_Pool_Slot, used) == 64, "fb_Pool_Slot.used");
+
+typedef struct fb_Shaping_Cache fb_Shaping_Cache;
+struct fb_Shaping_Cache {
+    _Alignas(8) fb_u8 table[56];
+    fb_Allocator allocator;
+    _Alignas(8) fb_u8 pool[40];
+};
+_Static_assert(sizeof(fb_Shaping_Cache) == 112, "fb_Shaping_Cache");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Cache, table) == 0, "fb_Shaping_Cache.table");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Cache, allocator) == 56, "fb_Shaping_Cache.allocator");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Cache, pool) == 72, "fb_Shaping_Cache.pool");
 
 typedef struct fb_Glyph_Atlas fb_Glyph_Atlas;
 struct fb_Glyph_Atlas {
@@ -1424,21 +1439,23 @@ _Static_assert(FB_OFFSETOF(fb_Windows_GL_Window, mouse_state) == 4648, "fb_Windo
 _Static_assert(FB_OFFSETOF(fb_Windows_GL_Window, running) == 4728, "fb_Windows_GL_Window.running");
 
 struct fb_Forbear {
+    fb_Allocator persistent_allocator;
     fb_Array_Node node_tree;
     fb_Array_Node_Measurement measurements;
     fb_s64 frame;
     float delta_time;
     double last_frame_time;
-    fb_Allocator persistent_allocator;
     fb_s64 parent_index;
-    void * state_buffers;
-    fb_Pool_Slot pool_slots[256];
     fb_u64 scope_key;
     fb_Base_Style base_style;
-    fb_u16 font_counter;
+    void * state_buffers;
+    fb_Pool_Slot pool_slots[256];
     fb_s64 state_current;
     fb_s64 state_used;
+    fb_u16 font_counter;
     void * freetype_library;
+    fb_Shaping_Cache shaping_caches[2];
+    fb_s64 shaping_cache_current;
     void * shaping_context;
     fb_u32 shader_program;
     fb_u32 shader_vao;
@@ -1447,29 +1464,31 @@ struct fb_Forbear {
     fb_Windows_GL_Window * window;
     fb_Windows_GL_Backend * backend;
 };
-_Static_assert(sizeof(fb_Forbear) == 18792, "fb_Forbear");
-_Static_assert(FB_OFFSETOF(fb_Forbear, node_tree) == 0, "fb_Forbear.node_tree");
-_Static_assert(FB_OFFSETOF(fb_Forbear, measurements) == 40, "fb_Forbear.measurements");
-_Static_assert(FB_OFFSETOF(fb_Forbear, frame) == 80, "fb_Forbear.frame");
-_Static_assert(FB_OFFSETOF(fb_Forbear, delta_time) == 88, "fb_Forbear.delta_time");
-_Static_assert(FB_OFFSETOF(fb_Forbear, last_frame_time) == 96, "fb_Forbear.last_frame_time");
-_Static_assert(FB_OFFSETOF(fb_Forbear, persistent_allocator) == 104, "fb_Forbear.persistent_allocator");
+_Static_assert(sizeof(fb_Forbear) == 19024, "fb_Forbear");
+_Static_assert(FB_OFFSETOF(fb_Forbear, persistent_allocator) == 0, "fb_Forbear.persistent_allocator");
+_Static_assert(FB_OFFSETOF(fb_Forbear, node_tree) == 16, "fb_Forbear.node_tree");
+_Static_assert(FB_OFFSETOF(fb_Forbear, measurements) == 56, "fb_Forbear.measurements");
+_Static_assert(FB_OFFSETOF(fb_Forbear, frame) == 96, "fb_Forbear.frame");
+_Static_assert(FB_OFFSETOF(fb_Forbear, delta_time) == 104, "fb_Forbear.delta_time");
+_Static_assert(FB_OFFSETOF(fb_Forbear, last_frame_time) == 112, "fb_Forbear.last_frame_time");
 _Static_assert(FB_OFFSETOF(fb_Forbear, parent_index) == 120, "fb_Forbear.parent_index");
-_Static_assert(FB_OFFSETOF(fb_Forbear, state_buffers) == 128, "fb_Forbear.state_buffers");
-_Static_assert(FB_OFFSETOF(fb_Forbear, pool_slots) == 136, "fb_Forbear.pool_slots");
-_Static_assert(FB_OFFSETOF(fb_Forbear, scope_key) == 18568, "fb_Forbear.scope_key");
-_Static_assert(FB_OFFSETOF(fb_Forbear, base_style) == 18576, "fb_Forbear.base_style");
-_Static_assert(FB_OFFSETOF(fb_Forbear, font_counter) == 18632, "fb_Forbear.font_counter");
-_Static_assert(FB_OFFSETOF(fb_Forbear, state_current) == 18640, "fb_Forbear.state_current");
-_Static_assert(FB_OFFSETOF(fb_Forbear, state_used) == 18648, "fb_Forbear.state_used");
+_Static_assert(FB_OFFSETOF(fb_Forbear, scope_key) == 128, "fb_Forbear.scope_key");
+_Static_assert(FB_OFFSETOF(fb_Forbear, base_style) == 136, "fb_Forbear.base_style");
+_Static_assert(FB_OFFSETOF(fb_Forbear, state_buffers) == 192, "fb_Forbear.state_buffers");
+_Static_assert(FB_OFFSETOF(fb_Forbear, pool_slots) == 200, "fb_Forbear.pool_slots");
+_Static_assert(FB_OFFSETOF(fb_Forbear, state_current) == 18632, "fb_Forbear.state_current");
+_Static_assert(FB_OFFSETOF(fb_Forbear, state_used) == 18640, "fb_Forbear.state_used");
+_Static_assert(FB_OFFSETOF(fb_Forbear, font_counter) == 18648, "fb_Forbear.font_counter");
 _Static_assert(FB_OFFSETOF(fb_Forbear, freetype_library) == 18656, "fb_Forbear.freetype_library");
-_Static_assert(FB_OFFSETOF(fb_Forbear, shaping_context) == 18664, "fb_Forbear.shaping_context");
-_Static_assert(FB_OFFSETOF(fb_Forbear, shader_program) == 18672, "fb_Forbear.shader_program");
-_Static_assert(FB_OFFSETOF(fb_Forbear, shader_vao) == 18676, "fb_Forbear.shader_vao");
-_Static_assert(FB_OFFSETOF(fb_Forbear, node_vbo) == 18680, "fb_Forbear.node_vbo");
-_Static_assert(FB_OFFSETOF(fb_Forbear, glyph_atlas) == 18688, "fb_Forbear.glyph_atlas");
-_Static_assert(FB_OFFSETOF(fb_Forbear, window) == 18776, "fb_Forbear.window");
-_Static_assert(FB_OFFSETOF(fb_Forbear, backend) == 18784, "fb_Forbear.backend");
+_Static_assert(FB_OFFSETOF(fb_Forbear, shaping_caches) == 18664, "fb_Forbear.shaping_caches");
+_Static_assert(FB_OFFSETOF(fb_Forbear, shaping_cache_current) == 18888, "fb_Forbear.shaping_cache_current");
+_Static_assert(FB_OFFSETOF(fb_Forbear, shaping_context) == 18896, "fb_Forbear.shaping_context");
+_Static_assert(FB_OFFSETOF(fb_Forbear, shader_program) == 18904, "fb_Forbear.shader_program");
+_Static_assert(FB_OFFSETOF(fb_Forbear, shader_vao) == 18908, "fb_Forbear.shader_vao");
+_Static_assert(FB_OFFSETOF(fb_Forbear, node_vbo) == 18912, "fb_Forbear.node_vbo");
+_Static_assert(FB_OFFSETOF(fb_Forbear, glyph_atlas) == 18920, "fb_Forbear.glyph_atlas");
+_Static_assert(FB_OFFSETOF(fb_Forbear, window) == 19008, "fb_Forbear.window");
+_Static_assert(FB_OFFSETOF(fb_Forbear, backend) == 19016, "fb_Forbear.backend");
 
 typedef struct fb_Node_Opening_Data fb_Node_Opening_Data;
 struct fb_Node_Opening_Data {
@@ -2714,12 +2733,21 @@ _Static_assert(FB_OFFSETOF(fb_Complete_Style, x_justification) == 261, "fb_Compl
 _Static_assert(FB_OFFSETOF(fb_Complete_Style, y_justification) == 262, "fb_Complete_Style.y_justification");
 
 typedef struct fb_Forbear fb_Forbear;
+typedef struct fb_Allocator fb_Allocator;
+struct fb_Allocator {
+    _Alignas(8) fb_u8 proc[8];
+    void * data;
+};
+_Static_assert(sizeof(fb_Allocator) == 16, "fb_Allocator");
+_Static_assert(FB_OFFSETOF(fb_Allocator, proc) == 0, "fb_Allocator.proc");
+_Static_assert(FB_OFFSETOF(fb_Allocator, data) == 8, "fb_Allocator.data");
+
 typedef struct fb_Node fb_Node;
 typedef fb_u8 fb_Node_Kind;
 #define FB_NODE_KIND_ELEMENT 0
 #define FB_NODE_KIND_SCOPE 1
 
-typedef struct fb_Glyphs fb_Glyphs;
+typedef struct fb_Shaping_Run fb_Shaping_Run;
 typedef struct fb_Glyph fb_Glyph;
 typedef struct fb_kbts_encode_utf8 fb_kbts_encode_utf8;
 struct fb_kbts_encode_utf8 {
@@ -2752,38 +2780,31 @@ _Static_assert(FB_OFFSETOF(fb_Glyph, position) == 32, "fb_Glyph.position");
 _Static_assert(FB_OFFSETOF(fb_Glyph, advance) == 40, "fb_Glyph.advance");
 _Static_assert(FB_OFFSETOF(fb_Glyph, offset) == 48, "fb_Glyph.offset");
 
-typedef struct fb_Allocator fb_Allocator;
-struct fb_Allocator {
-    _Alignas(8) fb_u8 proc[8];
-    void * data;
-};
-_Static_assert(sizeof(fb_Allocator) == 16, "fb_Allocator");
-_Static_assert(FB_OFFSETOF(fb_Allocator, proc) == 0, "fb_Allocator.proc");
-_Static_assert(FB_OFFSETOF(fb_Allocator, data) == 8, "fb_Allocator.data");
-
 typedef struct { fb_s64 count; fb_Glyph *data; fb_s64 allocated; fb_Allocator allocator; } fb_Array_Glyph;
 
 typedef struct { fb_s64 count; fb_s64 *data; fb_s64 allocated; fb_Allocator allocator; } fb_Array_s64;
 
-struct fb_Glyphs {
+struct fb_Shaping_Run {
     fb_u64 hash;
     fb_s32 length;
-    fb_Array_Glyph array;
+    fb_Array_Glyph glyphs;
     fb_Array_s64 pre_break_indices;
     float ascent;
     float line_height;
     fb_Vector2 min_size;
     fb_Vector2 max_size;
 };
-_Static_assert(sizeof(fb_Glyphs) == 120, "fb_Glyphs");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, hash) == 0, "fb_Glyphs.hash");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, length) == 8, "fb_Glyphs.length");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, array) == 16, "fb_Glyphs.array");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, pre_break_indices) == 56, "fb_Glyphs.pre_break_indices");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, ascent) == 96, "fb_Glyphs.ascent");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, line_height) == 100, "fb_Glyphs.line_height");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, min_size) == 104, "fb_Glyphs.min_size");
-_Static_assert(FB_OFFSETOF(fb_Glyphs, max_size) == 112, "fb_Glyphs.max_size");
+_Static_assert(sizeof(fb_Shaping_Run) == 120, "fb_Shaping_Run");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, hash) == 0, "fb_Shaping_Run.hash");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, length) == 8, "fb_Shaping_Run.length");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, glyphs) == 16, "fb_Shaping_Run.glyphs");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, pre_break_indices) == 56, "fb_Shaping_Run.pre_break_indices");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, ascent) == 96, "fb_Shaping_Run.ascent");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, line_height) == 100, "fb_Shaping_Run.line_height");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, min_size) == 104, "fb_Shaping_Run.min_size");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Run, max_size) == 112, "fb_Shaping_Run.max_size");
+
+typedef struct { fb_s64 count; fb_Vector2 *data; } fb_View_Vector2;
 
 struct fb_Node {
     fb_Node_Kind kind;
@@ -2797,7 +2818,8 @@ struct fb_Node {
     fb_s64 next_sibling;
     fb_s64 previous_sibling;
     fb_s64 parent;
-    fb_Glyphs glyphs;
+    fb_Shaping_Run shaping_run;
+    fb_View_Vector2 glyph_positions;
     fb_Complete_Style style;
     fb_Vector2 content_size;
     fb_Vector4 clipping_rectangle;
@@ -2807,7 +2829,7 @@ struct fb_Node {
     fb_u64 key;
     void * tree;
 };
-_Static_assert(sizeof(fb_Node) == 528, "fb_Node");
+_Static_assert(sizeof(fb_Node) == 544, "fb_Node");
 _Static_assert(FB_OFFSETOF(fb_Node, kind) == 0, "fb_Node.kind");
 _Static_assert(FB_OFFSETOF(fb_Node, size) == 4, "fb_Node.size");
 _Static_assert(FB_OFFSETOF(fb_Node, position) == 12, "fb_Node.position");
@@ -2819,15 +2841,16 @@ _Static_assert(FB_OFFSETOF(fb_Node, last_child) == 48, "fb_Node.last_child");
 _Static_assert(FB_OFFSETOF(fb_Node, next_sibling) == 56, "fb_Node.next_sibling");
 _Static_assert(FB_OFFSETOF(fb_Node, previous_sibling) == 64, "fb_Node.previous_sibling");
 _Static_assert(FB_OFFSETOF(fb_Node, parent) == 72, "fb_Node.parent");
-_Static_assert(FB_OFFSETOF(fb_Node, glyphs) == 80, "fb_Node.glyphs");
-_Static_assert(FB_OFFSETOF(fb_Node, style) == 200, "fb_Node.style");
-_Static_assert(FB_OFFSETOF(fb_Node, content_size) == 464, "fb_Node.content_size");
-_Static_assert(FB_OFFSETOF(fb_Node, clipping_rectangle) == 472, "fb_Node.clipping_rectangle");
-_Static_assert(FB_OFFSETOF(fb_Node, state_offset) == 488, "fb_Node.state_offset");
-_Static_assert(FB_OFFSETOF(fb_Node, state_size) == 496, "fb_Node.state_size");
-_Static_assert(FB_OFFSETOF(fb_Node, pool_slot) == 504, "fb_Node.pool_slot");
-_Static_assert(FB_OFFSETOF(fb_Node, key) == 512, "fb_Node.key");
-_Static_assert(FB_OFFSETOF(fb_Node, tree) == 520, "fb_Node.tree");
+_Static_assert(FB_OFFSETOF(fb_Node, shaping_run) == 80, "fb_Node.shaping_run");
+_Static_assert(FB_OFFSETOF(fb_Node, glyph_positions) == 200, "fb_Node.glyph_positions");
+_Static_assert(FB_OFFSETOF(fb_Node, style) == 216, "fb_Node.style");
+_Static_assert(FB_OFFSETOF(fb_Node, content_size) == 480, "fb_Node.content_size");
+_Static_assert(FB_OFFSETOF(fb_Node, clipping_rectangle) == 488, "fb_Node.clipping_rectangle");
+_Static_assert(FB_OFFSETOF(fb_Node, state_offset) == 504, "fb_Node.state_offset");
+_Static_assert(FB_OFFSETOF(fb_Node, state_size) == 512, "fb_Node.state_size");
+_Static_assert(FB_OFFSETOF(fb_Node, pool_slot) == 520, "fb_Node.pool_slot");
+_Static_assert(FB_OFFSETOF(fb_Node, key) == 528, "fb_Node.key");
+_Static_assert(FB_OFFSETOF(fb_Node, tree) == 536, "fb_Node.tree");
 
 typedef struct { fb_s64 count; fb_Node *data; fb_s64 allocated; fb_Allocator allocator; } fb_Array_Node;
 
@@ -2866,6 +2889,17 @@ _Static_assert(FB_OFFSETOF(fb_Pool_Slot, pool) == 0, "fb_Pool_Slot.pool");
 _Static_assert(FB_OFFSETOF(fb_Pool_Slot, allocator) == 40, "fb_Pool_Slot.allocator");
 _Static_assert(FB_OFFSETOF(fb_Pool_Slot, last_frame) == 56, "fb_Pool_Slot.last_frame");
 _Static_assert(FB_OFFSETOF(fb_Pool_Slot, used) == 64, "fb_Pool_Slot.used");
+
+typedef struct fb_Shaping_Cache fb_Shaping_Cache;
+struct fb_Shaping_Cache {
+    _Alignas(8) fb_u8 table[56];
+    fb_Allocator allocator;
+    _Alignas(8) fb_u8 pool[40];
+};
+_Static_assert(sizeof(fb_Shaping_Cache) == 112, "fb_Shaping_Cache");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Cache, table) == 0, "fb_Shaping_Cache.table");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Cache, allocator) == 56, "fb_Shaping_Cache.allocator");
+_Static_assert(FB_OFFSETOF(fb_Shaping_Cache, pool) == 72, "fb_Shaping_Cache.pool");
 
 typedef struct fb_Glyph_Atlas fb_Glyph_Atlas;
 struct fb_Glyph_Atlas {
@@ -3301,21 +3335,23 @@ _Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, dmabuf_modifiers) == 80, "fb_
 _Static_assert(FB_OFFSETOF(fb_Wayland_EGL_Backend, connection) == 120, "fb_Wayland_EGL_Backend.connection");
 
 struct fb_Forbear {
+    fb_Allocator persistent_allocator;
     fb_Array_Node node_tree;
     fb_Array_Node_Measurement measurements;
     fb_s64 frame;
     float delta_time;
     double last_frame_time;
-    fb_Allocator persistent_allocator;
     fb_s64 parent_index;
-    void * state_buffers;
-    fb_Pool_Slot pool_slots[256];
     fb_u64 scope_key;
     fb_Base_Style base_style;
-    fb_u16 font_counter;
+    void * state_buffers;
+    fb_Pool_Slot pool_slots[256];
     fb_s64 state_current;
     fb_s64 state_used;
+    fb_u16 font_counter;
     void * freetype_library;
+    fb_Shaping_Cache shaping_caches[2];
+    fb_s64 shaping_cache_current;
     void * shaping_context;
     fb_u32 shader_program;
     fb_u32 shader_vao;
@@ -3324,29 +3360,31 @@ struct fb_Forbear {
     fb_Wayland_EGL_Window * window;
     fb_Wayland_EGL_Backend * backend;
 };
-_Static_assert(sizeof(fb_Forbear) == 18792, "fb_Forbear");
-_Static_assert(FB_OFFSETOF(fb_Forbear, node_tree) == 0, "fb_Forbear.node_tree");
-_Static_assert(FB_OFFSETOF(fb_Forbear, measurements) == 40, "fb_Forbear.measurements");
-_Static_assert(FB_OFFSETOF(fb_Forbear, frame) == 80, "fb_Forbear.frame");
-_Static_assert(FB_OFFSETOF(fb_Forbear, delta_time) == 88, "fb_Forbear.delta_time");
-_Static_assert(FB_OFFSETOF(fb_Forbear, last_frame_time) == 96, "fb_Forbear.last_frame_time");
-_Static_assert(FB_OFFSETOF(fb_Forbear, persistent_allocator) == 104, "fb_Forbear.persistent_allocator");
+_Static_assert(sizeof(fb_Forbear) == 19024, "fb_Forbear");
+_Static_assert(FB_OFFSETOF(fb_Forbear, persistent_allocator) == 0, "fb_Forbear.persistent_allocator");
+_Static_assert(FB_OFFSETOF(fb_Forbear, node_tree) == 16, "fb_Forbear.node_tree");
+_Static_assert(FB_OFFSETOF(fb_Forbear, measurements) == 56, "fb_Forbear.measurements");
+_Static_assert(FB_OFFSETOF(fb_Forbear, frame) == 96, "fb_Forbear.frame");
+_Static_assert(FB_OFFSETOF(fb_Forbear, delta_time) == 104, "fb_Forbear.delta_time");
+_Static_assert(FB_OFFSETOF(fb_Forbear, last_frame_time) == 112, "fb_Forbear.last_frame_time");
 _Static_assert(FB_OFFSETOF(fb_Forbear, parent_index) == 120, "fb_Forbear.parent_index");
-_Static_assert(FB_OFFSETOF(fb_Forbear, state_buffers) == 128, "fb_Forbear.state_buffers");
-_Static_assert(FB_OFFSETOF(fb_Forbear, pool_slots) == 136, "fb_Forbear.pool_slots");
-_Static_assert(FB_OFFSETOF(fb_Forbear, scope_key) == 18568, "fb_Forbear.scope_key");
-_Static_assert(FB_OFFSETOF(fb_Forbear, base_style) == 18576, "fb_Forbear.base_style");
-_Static_assert(FB_OFFSETOF(fb_Forbear, font_counter) == 18632, "fb_Forbear.font_counter");
-_Static_assert(FB_OFFSETOF(fb_Forbear, state_current) == 18640, "fb_Forbear.state_current");
-_Static_assert(FB_OFFSETOF(fb_Forbear, state_used) == 18648, "fb_Forbear.state_used");
+_Static_assert(FB_OFFSETOF(fb_Forbear, scope_key) == 128, "fb_Forbear.scope_key");
+_Static_assert(FB_OFFSETOF(fb_Forbear, base_style) == 136, "fb_Forbear.base_style");
+_Static_assert(FB_OFFSETOF(fb_Forbear, state_buffers) == 192, "fb_Forbear.state_buffers");
+_Static_assert(FB_OFFSETOF(fb_Forbear, pool_slots) == 200, "fb_Forbear.pool_slots");
+_Static_assert(FB_OFFSETOF(fb_Forbear, state_current) == 18632, "fb_Forbear.state_current");
+_Static_assert(FB_OFFSETOF(fb_Forbear, state_used) == 18640, "fb_Forbear.state_used");
+_Static_assert(FB_OFFSETOF(fb_Forbear, font_counter) == 18648, "fb_Forbear.font_counter");
 _Static_assert(FB_OFFSETOF(fb_Forbear, freetype_library) == 18656, "fb_Forbear.freetype_library");
-_Static_assert(FB_OFFSETOF(fb_Forbear, shaping_context) == 18664, "fb_Forbear.shaping_context");
-_Static_assert(FB_OFFSETOF(fb_Forbear, shader_program) == 18672, "fb_Forbear.shader_program");
-_Static_assert(FB_OFFSETOF(fb_Forbear, shader_vao) == 18676, "fb_Forbear.shader_vao");
-_Static_assert(FB_OFFSETOF(fb_Forbear, node_vbo) == 18680, "fb_Forbear.node_vbo");
-_Static_assert(FB_OFFSETOF(fb_Forbear, glyph_atlas) == 18688, "fb_Forbear.glyph_atlas");
-_Static_assert(FB_OFFSETOF(fb_Forbear, window) == 18776, "fb_Forbear.window");
-_Static_assert(FB_OFFSETOF(fb_Forbear, backend) == 18784, "fb_Forbear.backend");
+_Static_assert(FB_OFFSETOF(fb_Forbear, shaping_caches) == 18664, "fb_Forbear.shaping_caches");
+_Static_assert(FB_OFFSETOF(fb_Forbear, shaping_cache_current) == 18888, "fb_Forbear.shaping_cache_current");
+_Static_assert(FB_OFFSETOF(fb_Forbear, shaping_context) == 18896, "fb_Forbear.shaping_context");
+_Static_assert(FB_OFFSETOF(fb_Forbear, shader_program) == 18904, "fb_Forbear.shader_program");
+_Static_assert(FB_OFFSETOF(fb_Forbear, shader_vao) == 18908, "fb_Forbear.shader_vao");
+_Static_assert(FB_OFFSETOF(fb_Forbear, node_vbo) == 18912, "fb_Forbear.node_vbo");
+_Static_assert(FB_OFFSETOF(fb_Forbear, glyph_atlas) == 18920, "fb_Forbear.glyph_atlas");
+_Static_assert(FB_OFFSETOF(fb_Forbear, window) == 19008, "fb_Forbear.window");
+_Static_assert(FB_OFFSETOF(fb_Forbear, backend) == 19016, "fb_Forbear.backend");
 
 typedef struct fb_Node_Opening_Data fb_Node_Opening_Data;
 struct fb_Node_Opening_Data {
