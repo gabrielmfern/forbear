@@ -4693,6 +4693,7 @@ Glyph_Atlas_Entry :: struct {
     uv_min:  Vector2;
     uv_max:  Vector2;
 };
+// A cache page
 // Shaping_Cache :: struct {
 //     slots: [4096]Glyphs;
 //     arena: Flat_Pool;
@@ -4963,7 +4964,7 @@ Glyph_Atlas :: struct {
     MAX_SIZE :: 4096;
 };
 SUBPIXEL_BINS :: 4;
-glyph_atlas_key :: (font: *Font, glyph_index: u16, size: u16, weight: u16, subpixel_bin: s32) -> u64 {
+glyph_cache_key :: (font: *Font, glyph_index: u16, size: u16, weight: u16, subpixel_bin: s32) -> u64 {
     assert(weight < 1 << 14, "font weights need to fit in 14 bits to leave room for the subpixel bin");
     key := (cast(u64) font.key) << 48;
     key |= (cast(u64) glyph_index) << 32;
@@ -5030,7 +5031,7 @@ glyph_atlas_fill :: () -> bool {
         font_units_to_point := get_font_units_to_pixel(node.style.font, node.style.font_size);
         for glyph: node.glyphs.array {
             _, subpixel_bin := glyph_subpixel_x(node.position.x, glyph.position.x, font_units_to_point, scale);
-            atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight, subpixel_bin);
+            atlas_key := glyph_cache_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight, subpixel_bin);
             if table_find_pointer(*glyph_atlas.table, atlas_key) != null  continue;
 
             set_weight(node.style.font, node.style.font_weight);
@@ -5741,7 +5742,7 @@ layout :: () {
                         end_x := array[line.end].position.x + array[line.end].advance.x;
 
                         width := end_x - start_x;
-                        line_glyphs := array_view(array, line.start, line.end + 1);
+                        line_glyphs := array_view(array, line.start, line.end + 1 - line.start);
                         for *glyph: line_glyphs {
                             if node.style.x_justification == {
                                 case .START;
@@ -6116,7 +6117,7 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
 
             for glyph: node.glyphs.array {
                 pixel_x, subpixel_bin := glyph_subpixel_x(node.position.x, glyph.position.x, font_units_to_point, scale);
-                atlas_key := glyph_atlas_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight, subpixel_bin);
+                atlas_key := glyph_cache_key(node.style.font, xx glyph.index, rounded_font_size, node.style.font_weight, subpixel_bin);
                 entry := table_find_pointer(*glyph_atlas.table, atlas_key);
 
                 instance: Draw_Instance;
