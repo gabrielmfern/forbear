@@ -278,4 +278,26 @@ main :: () {
             }
         });
     }
+
+    {
+        //
+        // ==== shaping cache tests ====
+        //
+        CACHED :: "cached across frames";
+        expected_glyphs: [..]s32;
+        test_frame("shaping cache: shaping text for the first time", #code {
+            index := text(CACHED);
+            for context.forbear.node_tree[index].shaping_run.glyphs  array_add(*expected_glyphs, it.index);
+        });
+        test_frame("shaping cache: carrying a run over from the previous frame", #code {
+            text(CACHED);
+        });
+        test_frame("shaping cache: a run carried over twice survives new text shaped into the reused pool", #code {
+            for 0..20  text("different text number % to fill the pool", it);
+            index := text(CACHED);
+            glyphs := context.forbear.node_tree[index].shaping_run.glyphs;
+            assert(glyphs.count == expected_glyphs.count, "expected % glyphs, got %", expected_glyphs.count, glyphs.count);
+            for glyphs  assert(it.index == expected_glyphs[it_index], "glyph %: expected index %, got %", it_index, expected_glyphs[it_index], it.index);
+        });
+    }
 }

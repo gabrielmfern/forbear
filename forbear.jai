@@ -4996,11 +4996,13 @@ shaping_cache_init :: (using shaping_cache: *Shaping_Cache) {
 }
 shaping_cache_copy_over :: (using shaping_cache: *Shaping_Cache, hash: u64, run: *Shaping_Run) -> *Shaping_Run {
     push_allocator(allocator);
-    owned_run                            := run.*;
-    owned_run.glyphs.allocator            = allocator;
-    owned_run.pre_break_indices.allocator = allocator;
-    array_copy(*owned_run.glyphs, run.glyphs);
-    array_copy(*owned_run.pre_break_indices, run.pre_break_indices);
+    glyphs:            [..]Glyph;
+    pre_break_indices: [..]s64;
+    array_copy(*glyphs, run.glyphs);
+    array_copy(*pre_break_indices, run.pre_break_indices);
+    owned_run                  := run.*;
+    owned_run.glyphs            = glyphs;
+    owned_run.pre_break_indices = pre_break_indices;
     return table_add(*table, hash, owned_run);
 }
 shape_text :: (style: Complete_Style, text: string) -> Shaping_Run {
