@@ -29,25 +29,43 @@
     - overflow WRAP
     - border_style DASHED
 - Documentation
-- Gather all the current pessimizations in the code
 - Async code primitives
+    - How to map these to adapters?
+- Support right to left text and interleaving right to left with left to right text
+- Multiple text runs per text node
+    - The main idea for this is so that we can support multiple styling per pieces of text, while still keeping all the
+      text flowing in the same way, with, for instance, the same wrapping.
+- Gather all the current pessimizations in the code
+- Implement optional aggressive caching for the UI
+    - This should ideally be done through simple functions that the user can inspect and change themselves.
 - Brainstorm how can there be a headless mode that allows for e2e testing
-- Implement async support for JavaScript
 - Metal rendering instead of OpenGL for macOS
-    - This is mainly because it looks like the fps is limited to ~100, while the actual forbear work is 0.5 milliseconds which should lead to about 2000 and it all points to OpenGL not working very well which leads to the low FPs
+    - This is mainly because it looks like the fps is limited to ~100, while the actual forbear work is 0.5
+      milliseconds, which should lead to about 2000 and it all points to OpenGL not working very well which leads to the
+      low FPs
 - DirectX rendering instead of OpenGL for Windows
 - Use dynamically linked FreeType on Linux, DirectWrite on Windows and CoreText on macOS
-- Implement Software rendering and render using it until the chosen graphics API is ready
+- Implement software rendering
+- Use software rendering to immediately start rendering the UI while the given graphics API is getting ready
+- Port the parts of kbts that we use to jai and trim it down to forbear's use cases.
+- Implement a font rasterizer in place of FreeType. Ideally it should run on the GPU.
 
-Big problems that I don't have an answer too:
+Big problems that I don't have an answer to:
 - Async
 - Hot reloading
+    - This is particularly important for the DX of building something like this with a native language. This is trivial
+      for interpreted languages such as JavaScript, which is quite convenient.
 - How to draw arbitrary things
 - Context
+- Lay out animations
+- Key frame animations
+- How should forbear avoid stutters when rendering huge amounts of text?
+    - How to easily virtualize text that all fit in the same wrapping run?
 
 Possible programs I can make with forbear next:
 - Merged Twitch and YouTube chat viewer
-- Program that intakes a website with an article, removes all fluff and makes all readable in a consistent way, and then adds in ways for you to add notes, highlight, and add summaries while you read.
+- Program that intakes a website with an article, removes all fluff and makes all readable in a consistent way, and then
+  adds in ways for you to add notes, highlight, and add summaries while you read.
 - A simple plotting program like Desmos.
 - Daily to-do list program based on // TO-DO: comments and to-do files
 - Program to create slides, or library based on forbear to do so where you define the slides through code
