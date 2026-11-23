@@ -1,4 +1,3 @@
-- Cache the text shaping, and the text wrapping
 - Text input hooks and components
 - Scroll bar component
 - Handle nested scrolling containers
