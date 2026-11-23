@@ -4639,12 +4639,22 @@ open_scope :: (key_hash: u64) -> Node_Opening_Data {
 }
 // Internal API shared between the overloads of text.
 set_node_glyphs :: (node: *Node, content: string) {
-    rounded_font_size := round_font_size(node.style.font_size * (cast(float) context.forbear.window.scale));
-    set_weight(node.style.font, node.style.font_weight);
-    set_font_size(node.style.font, rounded_font_size);
     node.shaping_run     = shape_text(node.style, content);
     node.glyph_positions = NewArray(node.shaping_run.glyphs.count, Vector2, initialized = false);
-    for node.shaping_run.glyphs  node.glyph_positions[it_index] = it.position;
+    {
+        using node.shaping_run;
+        pen:          Vector2;
+        break_cursor: s64;
+        for glyphs {
+            while break_cursor < pre_break_indices.count && pre_break_indices[break_cursor] == it_index {
+                pen.x         = 0.0;
+                pen.y        += line_height;
+                break_cursor += 1;
+            }
+            node.glyph_positions[it_index] = pen + it.offset;
+            pen += it.advance;
+        }
+    }
     font_units_to_point := get_font_units_to_pixel(node.style.font, node.style.font_size);
     node.size            = Vector2.{node.shaping_run.max_size.x, node.shaping_run.min_size.y} * font_units_to_point;
     node.min_size        = node.shaping_run.min_size * font_units_to_point;
@@ -4942,22 +4952,16 @@ glyph_atlas_fill :: () -> bool {
 
 Glyph :: struct {
     index:                    s32;
-    index_into_original_text: s64;
-    utf8:                     kbts_encode_utf8;
-    starts_word:              bool;
+    index_into_original_text: s32;
     can_wrap_before:          bool;
 
     // All of these are in points units, that means they do not account for the font size, but they do account for the
     // font weight.
-    position: Vector2;
-    // Meant for the recalculation of the glyphs position if that's required at some other laying out step
-    advance:  Vector2;
-    // Meant for the recalculation of the glyphs position if that's required at some other laying out step
-    offset:   Vector2;
+    advance: Vector2;
+    offset:  Vector2;
 };
 Shaping_Run :: struct {
-    hash:              u64;
-    length:            s32;
+    text:              string;
     glyphs:            [..]Glyph;
     pre_break_indices: [..]s64;
 
@@ -4972,154 +4976,181 @@ Shaping_Run :: struct {
     min_size:    Vector2;
     max_size:    Vector2;
 };
-shaping_run_hash :: (style: Complete_Style, line_height: float, text: string) -> u64 {
-    h := fnv1a_hash(cast(u64) style.font.key);
-    h  = fnv1a_hash(cast(u64) style.font_weight, h);
-    h  = fnv1a_hash(cast(u64) style.language, h);
-    h  = fnv1a_hash(cast(u64) line_height, h);
-    h  = fnv1a_hash(cast(u64) style.text_direction, h);
-    h  = fnv1a_hash(cast(u64) style.text_wrapping, h);
-    h  = fnv1a_hash(text.data, text.count, h);
-    return h;
+Shaping_Key :: struct {
+    hash:           u64;
+    font:           u16;
+    font_weight:    u16;
+    language:       Language;
+    text_direction: Text_Direction;
+    text_wrapping:  Text_Wrapping;
+    line_height:    Line_Height;
+    text:           string;
+};
+shaping_key_hash :: (key: Shaping_Key) -> u32 {
+    return cast,trunc(u32) key.hash;
+}
+shaping_key_equals :: (a: Shaping_Key, b: Shaping_Key) -> bool {
+    return a.hash                   == b.hash
+        && a.font                   == b.font
+        && a.font_weight            == b.font_weight
+        && a.language               == b.language
+        && a.text_direction         == b.text_direction
+        && a.text_wrapping          == b.text_wrapping
+        && a.line_height.kind       == b.line_height.kind
+        && a.line_height.percentage == b.line_height.percentage
+        && a.text                   == b.text;
 }
 Shaping_Cache :: struct {
-    Cache_Table :: Table(u64, Shaping_Run);
-    table:     Cache_Table;
+    BUDGET :: 4 * 1024 * 1024;
+    table:     Table(Shaping_Key, Shaping_Run, shaping_key_hash, shaping_key_equals);
     allocator: Allocator;
-    // TO-DO: we should have two pools, one for each frame, and we should be using them instead of this.
     pool:      Flat_Pool;
 };
 shaping_cache_init :: (using shaping_cache: *Shaping_Cache) {
     allocator.proc  = flat_pool_allocator_proc;
     allocator.data  = *pool;
-    table.allocator = allocator;
+    table.allocator = context.forbear.persistent_allocator;
 }
-shaping_cache_copy_over :: (using shaping_cache: *Shaping_Cache, hash: u64, run: *Shaping_Run) -> *Shaping_Run {
+shaping_cache_copy_over :: (using shaping_cache: *Shaping_Cache, key: Shaping_Key, run: *Shaping_Run) -> *Shaping_Run {
     push_allocator(allocator);
     glyphs:            [..]Glyph;
     pre_break_indices: [..]s64;
     array_copy(*glyphs, run.glyphs);
     array_copy(*pre_break_indices, run.pre_break_indices);
     owned_run                  := run.*;
+    owned_run.text              = copy_string(run.text);
     owned_run.glyphs            = glyphs;
     owned_run.pre_break_indices = pre_break_indices;
-    return table_add(*table, hash, owned_run);
+    owned_key                  := key;
+    owned_key.text              = owned_run.text;
+    return table_add(*table, owned_key, owned_run);
 }
 shape_text :: (style: Complete_Style, text: string) -> Shaping_Run {
     using context.forbear;
-    font               := style.font;
-    font_line_height   := cast(float) font.raster_face.height;
-    styled_line_height := font_line_height;
-    if #complete style.line_height.kind == {
-        case .PERCENTAGE;
-            styled_line_height = styled_line_height * style.line_height.percentage;
-        case .FIXED;
-            styled_line_height = style.line_height.fixed / get_font_units_to_pixel(font, style.font_size);
-    }
+    font := style.font;
 
-    hash          := shaping_run_hash(style, styled_line_height, text);
+    key: Shaping_Key;
+    key.font           = font.key;
+    key.font_weight    = style.font_weight;
+    key.language       = style.language;
+    key.text_direction = style.text_direction;
+    key.text_wrapping  = style.text_wrapping;
+    key.line_height    = style.line_height;
+    key.text           = text;
+    if key.line_height.kind == .FIXED {
+        key.line_height.fixed /= get_font_units_to_pixel(font, style.font_size);
+    }
+    key.hash = fnv1a_hash(cast(u64) key.font);
+    key.hash = fnv1a_hash(cast(u64) key.font_weight, key.hash);
+    key.hash = fnv1a_hash(cast(u64) key.language, key.hash);
+    key.hash = fnv1a_hash(cast(u64) key.text_direction, key.hash);
+    key.hash = fnv1a_hash(cast(u64) key.text_wrapping, key.hash);
+    key.hash = fnv1a_hash(cast(u64) key.line_height.kind, key.hash);
+    key.hash = fnv1a_hash(cast(u64) (cast(*u32) *key.line_height.percentage).*, key.hash);
+    key.hash = fnv1a_hash(text.data, text.count, key.hash);
+
     shaping_cache := *shaping_caches[shaping_cache_current];
+    cached_run    := table_find_pointer(*shaping_cache.table, key);
+    if cached_run  return cached_run.*;
+    cached_run = table_find_pointer(*shaping_caches[1 - shaping_cache_current].table, key);
+    if cached_run  return shaping_cache_copy_over(shaping_cache, key, cached_run).*;
 
-    cached_shaping_run := table_find_pointer(*shaping_cache.table, hash);
-    if cached_shaping_run == null {
-        cached_shaping_run = table_find_pointer(*shaping_caches[1 - shaping_cache_current].table, hash);
-        if cached_shaping_run == null {
-            text_wrapping                          := style.text_wrapping;
-            shaping_run                            : Shaping_Run;
-            shaping_run.glyphs.allocator            = shaping_cache.allocator;
-            shaping_run.pre_break_indices.allocator = shaping_cache.allocator;
-            shaping_run.line_height = styled_line_height;
-            shaping_run.ascent =
-                  cast(float) font.raster_face.ascender
-                + (shaping_run.line_height - font_line_height) / 2.0;
-
-            ctx    := shaping_context;
-            WGHT   : u32 : 0x77676874;
-            weight := kbts_variation.{ Tag = WGHT, Value = cast(float) font.weight };
-            kbts_ShapePushFont2(ctx,
-                                *font.shaping_font,
-                                *weight,
-                                ifx font.weight != U16_MAX then cast(s32)1 else cast(s32)0,
-                                null);
-            defer kbts_ShapePopFont(ctx);
-
-            kbts_ShapeBegin(shaping_context, xx style.text_direction, xx style.language);
-            kbts_ShapeUtf8(shaping_context,
-                           text.data,
-                           xx text.count,
-                           xx kbts_user_id_generation_mode_enum.KBTS_USER_ID_GENERATION_MODE_SOURCE_INDEX);
-            if font.weight != U16_MAX {
-                kbts_ShapePopGlobalVariation(shaping_context, WGHT);
-            }
-            kbts_ShapeEnd(shaping_context);
-
-            run:          kbts_run;
-            pen:          Vector2;
-            // The advance local to this word
-            word_advance: Vector2;
-            while (kbts_ShapeRun(shaping_context, *run) != 0) {
-                shaping_glyph: *kbts_glyph;
-                while (kbts_GlyphIteratorNext(*run.Glyphs, *shaping_glyph) != 0) {
-                    shape_codepoint: kbts_shape_codepoint;
-                    if kbts_ShapeGetShapeCodepoint(shaping_context, shaping_glyph.UserIdOrCodepointIndex, *shape_codepoint) == 0 {
-                        log_error("Could not get original codeopint for glyph with user id %", shaping_glyph.UserIdOrCodepointIndex);
-                        continue;
-                    }
-
-                    utf8_encoded    := kbts_EncodeUtf8(shape_codepoint.Codepoint);
-
-                    advance         := Vector2.{ xx shaping_glyph.AdvanceX, xx shaping_glyph.AdvanceY };
-                    offset          := Vector2.{ xx shaping_glyph.OffsetX, xx shaping_glyph.OffsetY };
-                    utf8            : string;
-                    utf8.data        = utf8_encoded.Encoded.data;
-                    utf8.count       = utf8_encoded.EncodedLength;
-                    is_linebreak    := starts_with(utf8, "\n");
-                    can_wrap_before := (shape_codepoint.BreakFlags & xx kbts_break_flags_enum.KBTS_BREAK_FLAG_LINE_SOFT) != 0;
-                    if is_linebreak {
-                        advance.x  = -pen.x;
-                        advance.y += shaping_run.line_height;
-                        array_add(*shaping_run.pre_break_indices, shaping_run.glyphs.count);
-                    } else {
-                        glyph: Glyph;
-                        glyph.index                    = xx shaping_glyph.Id;
-                        glyph.advance                  = advance;
-                        glyph.offset                   = offset;
-                        glyph.position                 = pen + glyph.offset;
-                        glyph.utf8                     = utf8_encoded;
-                        glyph.index_into_original_text = shape_codepoint.UserId;
-                        glyph.starts_word              = (shape_codepoint.BreakFlags & xx kbts_break_flags_enum.KBTS_BREAK_FLAG_WORD) != 0;
-                        glyph.can_wrap_before          = can_wrap_before;
-                        array_add(*shaping_run.glyphs, glyph);
-                    }
-
-                    pen                   += advance;
-                    shaping_run.max_size.x = max(shaping_run.max_size.x, pen.x);
-                    if text_wrapping == .WORD {
-                        if can_wrap_before || is_linebreak {
-                            word_advance            = Vector2.{};
-                            shaping_run.max_size.y += shaping_run.line_height;
-                        }
-                        if !starts_with(utf8, " ") && !is_linebreak then word_advance += advance;
-                        shaping_run.min_size.x = max(shaping_run.min_size.x, word_advance.x);
-                    } else if text_wrapping == .CHARACTER {
-                        shaping_run.min_size.x  = max(shaping_run.min_size.x, advance.x);
-                        shaping_run.max_size.y += shaping_run.line_height;
-                    } else if text_wrapping == .NONE {
-                        shaping_run.min_size.x = max(shaping_run.min_size.x, pen.x);
-                    }
-                }
-            }
-            shaping_run.min_size.y = pen.y + shaping_run.line_height;
-            shaping_run.max_size.y = max(shaping_run.min_size.y, shaping_run.max_size.y);
-
-            table_add(*shaping_cache.table, hash, shaping_run);
-            return shaping_run;
-        } else {
-            return shaping_cache_copy_over(*shaping_caches[shaping_cache_current], hash, cached_shaping_run).*;
-        }
-    } else {
-        return cached_shaping_run.*;
+    set_weight(font, style.font_weight);
+    font_line_height                       := cast(float) font.raster_face.height;
+    text_wrapping                          := style.text_wrapping;
+    shaping_run                            : Shaping_Run;
+    shaping_run.text                        = copy_string(text,, shaping_cache.allocator);
+    shaping_run.glyphs.allocator            = shaping_cache.allocator;
+    shaping_run.pre_break_indices.allocator = shaping_cache.allocator;
+    if #complete key.line_height.kind == {
+        case .PERCENTAGE;
+            shaping_run.line_height = font_line_height * key.line_height.percentage;
+        case .FIXED;
+            shaping_run.line_height = key.line_height.fixed;
     }
+    shaping_run.ascent =
+          cast(float) font.raster_face.ascender
+        + (shaping_run.line_height - font_line_height) / 2.0;
+
+    ctx    := shaping_context;
+    WGHT   : u32 : 0x77676874;
+    weight := kbts_variation.{ Tag = WGHT, Value = cast(float) font.weight };
+    kbts_ShapePushFont2(ctx,
+                        *font.shaping_font,
+                        *weight,
+                        ifx font.weight != U16_MAX then cast(s32)1 else cast(s32)0,
+                        null);
+    defer kbts_ShapePopFont(ctx);
+
+    kbts_ShapeBegin(shaping_context, xx style.text_direction, xx style.language);
+    kbts_ShapeUtf8(shaping_context,
+                   text.data,
+                   xx text.count,
+                   xx kbts_user_id_generation_mode_enum.KBTS_USER_ID_GENERATION_MODE_SOURCE_INDEX);
+    if font.weight != U16_MAX {
+        kbts_ShapePopGlobalVariation(shaping_context, WGHT);
+    }
+    kbts_ShapeEnd(shaping_context);
+
+    run:          kbts_run;
+    pen:          Vector2;
+    // The advance local to this word
+    word_advance: Vector2;
+    while (kbts_ShapeRun(shaping_context, *run) != 0) {
+        shaping_glyph: *kbts_glyph;
+        while (kbts_GlyphIteratorNext(*run.Glyphs, *shaping_glyph) != 0) {
+            shape_codepoint: kbts_shape_codepoint;
+            if kbts_ShapeGetShapeCodepoint(shaping_context, shaping_glyph.UserIdOrCodepointIndex, *shape_codepoint) == 0 {
+                log_error("Could not get original codeopint for glyph with user id %", shaping_glyph.UserIdOrCodepointIndex);
+                continue;
+            }
+
+            utf8_encoded    := kbts_EncodeUtf8(shape_codepoint.Codepoint);
+
+            advance         := Vector2.{ xx shaping_glyph.AdvanceX, xx shaping_glyph.AdvanceY };
+            offset          := Vector2.{ xx shaping_glyph.OffsetX, xx shaping_glyph.OffsetY };
+            utf8            : string;
+            utf8.data        = utf8_encoded.Encoded.data;
+            utf8.count       = utf8_encoded.EncodedLength;
+            is_linebreak    := starts_with(utf8, "\n");
+            can_wrap_before := (shape_codepoint.BreakFlags & xx kbts_break_flags_enum.KBTS_BREAK_FLAG_LINE_SOFT) != 0;
+            if is_linebreak {
+                advance.x  = -pen.x;
+                advance.y += shaping_run.line_height;
+                array_add(*shaping_run.pre_break_indices, shaping_run.glyphs.count);
+            } else {
+                glyph: Glyph;
+                glyph.index                    = xx shaping_glyph.Id;
+                glyph.index_into_original_text = xx shape_codepoint.UserId;
+                glyph.can_wrap_before          = can_wrap_before;
+                glyph.advance                  = advance;
+                glyph.offset                   = offset;
+                array_add(*shaping_run.glyphs, glyph);
+            }
+
+            pen                   += advance;
+            shaping_run.max_size.x = max(shaping_run.max_size.x, pen.x);
+            if text_wrapping == .WORD {
+                if can_wrap_before || is_linebreak {
+                    word_advance            = Vector2.{};
+                    shaping_run.max_size.y += shaping_run.line_height;
+                }
+                if !starts_with(utf8, " ") && !is_linebreak then word_advance += advance;
+                shaping_run.min_size.x = max(shaping_run.min_size.x, word_advance.x);
+            } else if text_wrapping == .CHARACTER {
+                shaping_run.min_size.x  = max(shaping_run.min_size.x, advance.x);
+                shaping_run.max_size.y += shaping_run.line_height;
+            } else if text_wrapping == .NONE {
+                shaping_run.min_size.x = max(shaping_run.min_size.x, pen.x);
+            }
+        }
+    }
+    shaping_run.min_size.y = pen.y + shaping_run.line_height;
+    shaping_run.max_size.y = max(shaping_run.min_size.y, shaping_run.max_size.y);
+
+    key.text = shaping_run.text;
+    table_add(*shaping_cache.table, key, shaping_run);
+    return shaping_run;
 }
 
 static_state_buffers: [2][16 * 1024 * 1024]u8 #align 16;
@@ -6313,9 +6344,14 @@ prepare_for_next_frame :: () {
     state_used    = 0;
     array_reset_keeping_memory(*node_tree);
 
-    shaping_cache_current = 1 - shaping_cache_current;
-    table_reset(*shaping_caches[shaping_cache_current].table);
-    reset(*shaping_caches[shaping_cache_current].pool);
+    current_shaping_cache_pool := *shaping_caches[shaping_cache_current].pool;
+    if current_shaping_cache_pool.current_point - current_shaping_cache_pool.memory_base > Shaping_Cache.BUDGET {
+        // This switching between the two pools means we're going to start trying to clean up the shaping cache by
+        // simply trying to copy over from the previous arena.
+        shaping_cache_current = 1 - shaping_cache_current;
+        table_reset_keeping_memory(*shaping_caches[shaping_cache_current].table);
+        reset(*shaping_caches[shaping_cache_current].pool);
+    }
 
     for *slot: pool_slots {
         if slot.used && slot.last_frame != frame {
