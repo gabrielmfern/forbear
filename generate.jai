@@ -14,10 +14,6 @@ slice :: inline (s: string, index: s64) -> string {
     return slice(s, index, s.count - index);
 }
 generate :: () {
-    build_options := get_build_options();
-
-    debug := build_options.array_bounds_check == .ON;
-
     set_build_options_dc(.{do_output=false});
 
     // Executable + the shared libraries it needs at runtime, side by side.
@@ -86,7 +82,7 @@ generate :: () {
 
     {
         // kbts bindings
-        build_kb_text_shape_ok := build_cpp_static_lib(tprint("vendor/kb_text_shape-%", platform), "vendor/kb_text_shape.c", extra = .["-fPIC"], debug = debug);
+        build_kb_text_shape_ok := build_cpp_static_lib(tprint("vendor/kb_text_shape-%", platform), "vendor/kb_text_shape.c", extra = .["-fPIC"]);
         assert(build_kb_text_shape_ok, "could not compile kb_text_shape");
         kbts_bindings_opts: Generate_Bindings_Options;
         array_add(*kbts_bindings_opts.system_include_paths, ..get_default_system_include_paths());
@@ -138,7 +134,6 @@ generate :: () {
             "vendor/freetype/src/gzip/ftgzip.c",
             "vendor/freetype/src/lzw/ftlzw.c",
             extra = .["-fPIC", "-DFT2_BUILD_LIBRARY", "-Ivendor/freetype/include"],
-            debug = debug,
         );
         assert(build_freetype_ok, "could not compile freetype");
         freetype_bindings_opts: Generate_Bindings_Options;
