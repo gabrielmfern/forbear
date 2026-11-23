@@ -314,4 +314,22 @@ main :: () {
             assert(tree[a].shaping_run.line_height != tree[b].shaping_run.line_height, "expected different line heights, both got %", tree[a].shaping_run.line_height);
         });
     }
+
+    {
+        test_frame("node pool: only the last array in a pool grows in place, and its neighbors survive", #code {
+            parent := open_element(Style.{}, "node pool growth");
+            first  := state([..]s64);
+            second := state([..]s64);
+            for 0..7  array_add(first, it);
+            for 0..7  array_add(second, 100 + it);
+            second_data := second.data;
+            for 8..15  array_add(second, 100 + it);
+            for 8..15  array_add(first, it);
+            close_element(parent);
+            assert(second.data == second_data, "expected the last array in the pool to grow in place");
+            assert(first.count == 16 && second.count == 16, "expected 16 items in each, got % and %", first.count, second.count);
+            for first.*   assert(it == it_index, "first[%]: expected %, got %", it_index, it_index, it);
+            for second.*  assert(it == 100 + it_index, "second[%]: expected %, got %", it_index, 100 + it_index, it);
+        });
+    }
 }

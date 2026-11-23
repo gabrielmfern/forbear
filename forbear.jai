@@ -3668,6 +3668,14 @@ get_measurement :: (node_index: s64 = -1, include_scopes := false) -> measuremen
         return Node_Measurement.{}, false;
     }
 }
+node_pool_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s64, old_memory: *void, allocator_data: *void) -> *void {
+    pool := cast(*Flat_Pool) allocator_data;
+    if mode == .RESIZE && cast(*u8) old_memory + old_size == pool.current_point {
+        pool.current_point = old_memory;
+        return get(pool, requested_size);
+    }
+    return flat_pool_allocator_proc(mode, requested_size, old_size, old_memory, allocator_data);
+}
 node_pool :: () -> Allocator {
     using context.forbear;
     assert(parent_index != -1, "node_pool() must be called from inside an element");
@@ -3685,7 +3693,7 @@ node_pool :: () -> Allocator {
                 pool_slot = it_index;
                 if slot.pool.memory_base == null {
                     init(*slot.pool, 64 * 1024 * 1024);
-                    slot.allocator.proc = flat_pool_allocator_proc;
+                    slot.allocator.proc = node_pool_allocator_proc;
                     slot.allocator.data = *slot.pool;
                 }
                 slot.used = true;
