@@ -161,4 +161,121 @@ main :: () {
             shallow_node_check(1, .ELEMENT, -1);
         });
     }
+
+    {
+        wrap_arrangement :: (content:  string,
+                             wrapping: Text_Wrapping,
+                             width:    float,
+                             x_justification := Alignment.START) -> text_index: s64 {
+            parent := open_element(
+                Style.{ width = fixed(width), text_wrapping = wrapping, x_justification = x_justification },
+                tprint("%-%-%-%", content, wrapping, width, x_justification),
+            );
+            text_index := text(Style.{}, content);
+            close_element(parent);
+            return text_index;
+        }
+        Wrapped_Line :: struct {
+            text:    string;
+            start_x: float;
+            end_x:   float;
+        }
+        wrapped_lines :: (text_index: s64) -> [..]Wrapped_Line {
+            node    := *context.forbear.node_tree[text_index];
+            lines   : [..]Wrapped_Line;
+            builder : String_Builder;
+            for glyph: node.shaping_run.glyphs {
+                position := node.glyph_positions[it_index];
+                if it_index == 0 || position.y != node.glyph_positions[it_index - 1].y {
+                    if lines.count > 0  lines[lines.count - 1].text = builder_to_string(*builder);
+                    array_add(*lines, .{ start_x = position.x });
+                }
+                append(*builder, to_string(glyph.utf8.Encoded.data, glyph.utf8.EncodedLength));
+                lines[lines.count - 1].end_x = position.x + glyph.advance.x;
+            }
+            if lines.count > 0  lines[lines.count - 1].text = builder_to_string(*builder);
+            return lines;
+        }
+        expect_lines :: (text_index: s64, expected: ..string) {
+            lines := wrapped_lines(text_index);
+            assert(lines.count == expected.count, "expected % lines %, got %", expected.count, expected, lines);
+            for expected  assert(lines[it_index].text == it, "line %: expected \"%\", got \"%\"", it_index, it, lines[it_index].text);
+        }
+
+        //
+        // ==== text wrapping tests ====
+        //
+        test_frame("text wrapping: WORD keeps text on one line when it fits", #code {
+            text_index := wrap_arrangement("a b c", .WORD, 1000);
+            layout();
+            expect_lines(text_index, "a b c");
+        });
+
+        test_frame("text wrapping: WORD breaks after spaces when the width is too small", #code {
+            text_index := wrap_arrangement("a b c", .WORD, 1);
+            layout();
+            expect_lines(text_index, "a ", "b ", "c");
+        });
+
+        test_frame("text wrapping: WORD never breaks inside a word", #code {
+            text_index := wrap_arrangement("abc def", .WORD, 1);
+            layout();
+            expect_lines(text_index, "abc ", "def");
+        });
+
+        test_frame("text wrapping: CHARACTER breaks between any characters", #code {
+            text_index := wrap_arrangement("abc", .CHARACTER, 1);
+            layout();
+            expect_lines(text_index, "a", "b", "c");
+        });
+
+        test_frame("text wrapping: NONE never breaks on width", #code {
+            text_index := wrap_arrangement("a b c", .NONE, 1);
+            layout();
+            expect_lines(text_index, "a b c");
+        });
+
+        test_frame("text wrapping: line breaks always break, for every wrapping mode", #code {
+            word      := wrap_arrangement("a\nb", .WORD, 1000);
+            character := wrap_arrangement("a\nb", .CHARACTER, 1000);
+            none      := wrap_arrangement("a\nb", .NONE, 1000);
+            layout();
+            expect_lines(word, "a", "b");
+            expect_lines(character, "a", "b");
+            expect_lines(none, "a", "b");
+        });
+
+        test_frame("text wrapping: same text at different widths in the same frame wraps independently", #code {
+            narrow := wrap_arrangement("a b c", .WORD, 1);
+            wide   := wrap_arrangement("a b c", .WORD, 1000);
+            layout();
+            tree := context.forbear.node_tree;
+            assert(tree[narrow].shaping_run.glyphs.data == tree[wide].shaping_run.glyphs.data, "expected both nodes to share the cached shaping run");
+            expect_lines(narrow, "a ", "b ", "c");
+            expect_lines(wide, "a b c");
+        });
+
+        test_frame("text wrapping: justification aligns every wrapped line inside the node", #code {
+            start  := wrap_arrangement("a bb ccc", .WORD, 1, .START);
+            center := wrap_arrangement("a bb ccc", .WORD, 1, .CENTER);
+            end    := wrap_arrangement("a bb ccc", .WORD, 1, .END);
+            layout();
+            tree := context.forbear.node_tree;
+            node := tree[start];
+            line_end := node.size.x / get_font_units_to_pixel(node.style.font, node.style.font_size);
+            assert(wrapped_lines(start).count == 3, "expected 3 lines, got %", wrapped_lines(start));
+            close :: (a: float, b: float) -> bool { return a - b < 0.01 && b - a < 0.01; }
+            for line: wrapped_lines(start) {
+                assert(close(line.start_x, 0), "START line \"%\" starts at %", line.text, line.start_x);
+            }
+            for line: wrapped_lines(center) {
+                left_gap  := line.start_x;
+                right_gap := line_end - line.end_x;
+                assert(close(left_gap, right_gap), "CENTER line \"%\" has gaps % and %", line.text, left_gap, right_gap);
+            }
+            for line: wrapped_lines(end) {
+                assert(close(line.end_x, line_end), "END line \"%\" ends at %, expected %", line.text, line.end_x, line_end);
+            }
+        });
+    }
 }
