@@ -75,8 +75,10 @@ render :: (data: *void) {
             }
         });
 
-        input_state := use_input_state(SAM_QUOTE, 80);
-        Input(Style.{ width = fixed(500), text_wrapping = .WORD, height = fit() }, input_state);
+        input_state := use_input_state(initial_value  = SAM_QUOTE,
+                                       initial_cursor = SAM_QUOTE.count - 1,
+                                       initial_selection_anchor = 0);
+        Input(Style.{ width = fixed(500), text_wrapping = .WORD, height = fixed(200) }, input_state);
     });
 
     layout();

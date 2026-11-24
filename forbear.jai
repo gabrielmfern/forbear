@@ -3613,7 +3613,7 @@ Node :: struct {
     // Clipped rectangle inherited from ancestors that have constrained size with overflowing children.
     // Format: [x, y, width, height].
     // If NAN, no clipping is applied.
-    clipping_rectangle: Vector4 = VECTOR4_NAN;
+    clipping_rectangle: Vector4 = VECTOR4_NAN; // TO-DO: implement the usage for this
     state_offset:       s64;
     state_size:         s64;
     pool_slot:          s64     = -1;
@@ -3918,8 +3918,8 @@ use_scrolling :: (using state: *Scrolling_State) {
     }
 } @hook
 find_glyph_index_at_byte :: (glyphs: []Glyph, byte_index: s64) -> s64 {
-    glyph_index := byte_index;
-    while glyphs[glyph_index].index_into_original_text < byte_index {
+    glyph_index := 0;
+    while glyph_index < glyphs.count && glyphs[glyph_index].index_into_original_text < byte_index {
         glyph_index += 1;
     }
     return glyph_index;
@@ -3987,48 +3987,69 @@ use_glyph_closest_to :: (position: Vector2) -> s64 {
 Selection :: (style: Style) {
     using context.input;
     using state;
-    previous_node := get_previous_node();
-    if previous_node != null && selection_anchor != -1 {
-        start               := min(selection_anchor, cursor);
-        end                 := max(selection_anchor, cursor);
+    previous_input_node := get_previous_node();
+    previous_text_node := get_previous_node(text_node_index);
+    if previous_input_node != null && previous_text_node != null && selection_anchor != -1 {
+        shaping_run                  := previous_text_node.shaping_run;
+        glyph_positions              := previous_text_node.glyph_positions;
+        selection_anchor_glyph_index := find_glyph_index_at_byte(shaping_run.glyphs, selection_anchor);
+        cursor_glyph_index           := find_glyph_index_at_byte(shaping_run.glyphs, cursor);
 
-        text_node           := get_node(text_node_index);
-        shaping_run         := text_node.shaping_run;
-        font_size           := text_node.style.font_size;
-        font_units_to_pixel := get_font_units_to_pixel(*context.inter, font_size);
+        start := min(selection_anchor_glyph_index, cursor_glyph_index);
+        end   := max(selection_anchor_glyph_index, cursor_glyph_index);
 
-        // TO-DO: this is assuming the glyphs map 1:1 to the bytes
-        position: Vector2;
-        if shaping_run.array.count > 0 {
-            if start == shaping_run.array.count {
-                position = (peek(shaping_run.array).position + peek(shaping_run.array).advance) * font_units_to_pixel;
-            } else {
-                position = shaping_run.array[start].position * font_units_to_pixel;
+        font_size           := previous_text_node.style.font_size;
+        font_units_to_pixel := get_font_units_to_pixel(previous_text_node.style.font, font_size);
+
+        Selection_Rectangle :: struct {
+            position: Vector2;
+            width:    float;
+        };
+        selection_rectangles: [..]Selection_Rectangle;
+        if shaping_run.glyphs.count > 0 && start < end {
+            line_start := start;
+            line       := cast(s64) Math.floor(glyph_positions[start].y / shaping_run.line_height + 0.5);
+            for start..end {
+                it_line := -1;
+                if it != end {
+                    it_line = cast(s64) Math.floor(glyph_positions[it].y / shaping_run.line_height + 0.5);;
+                }
+                if it_line != line {
+                    last := it - 1;
+                    x0   := glyph_positions[line_start].x;
+                    x1   := glyph_positions[last].x + shaping_run.glyphs[last].advance.x;
+                    array_add(*selection_rectangles, Selection_Rectangle.{
+                        position = Vector2.{ x0, line * shaping_run.line_height } * font_units_to_pixel,
+                        width    = (x1 - x0) * font_units_to_pixel,
+                    });
+                    line_start = it;
+                    line       = it_line;
+                }
             }
         }
-        width: float;
-        if shaping_run.array.count > 0 {
-            if end == shaping_run.array.count then width = (  peek(shaping_run.array).position.x
-                                                       + peek(shaping_run.array).advance.x) * font_units_to_pixel
-                                                    - position.x;
-            else                              width = shaping_run.array[end].position.x * font_units_to_pixel - position.x;
+
+        line_height := shaping_run.line_height * font_units_to_pixel;
+        input_inner_height :=
+              previous_input_node.size.y
+            - previous_input_node.style.padding.y.x
+            - previous_input_node.style.padding.y.y
+            - previous_input_node.style.border_width.y.x
+            - previous_input_node.style.border_width.y.y;
+        offset   := -scrolling_state.effective_offset;
+        offset.x += previous_input_node.style.padding.x.x + previous_input_node.style.border_width.x.x;
+        offset.y +=
+              previous_input_node.style.padding.y.x
+            + previous_input_node.style.border_width.y.x
+            + (input_inner_height - previous_text_node.size.y) / 2;
+        for rect: selection_rectangles {
+            element(overwrite(Style.{
+                // TO-DO: we should query the selection color of the operating system here
+                background = color(hex("#3399FF")),
+                placement  = relative(rect.position + offset),
+                width      = fixed(rect.width),
+                height     = fixed(line_height),
+            }, style), it_index);
         }
-        // TO-DO: support multiline content, because we're currently only comparing against there being no wrapping
-        line_height  := shaping_run.line_height * font_units_to_pixel;
-        input        := get_node();
-        inner_height := previous_node.size.y - input.style.padding.y.x - input.style.padding.y.y;
-        position     -= scrolling_state.effective_offset;
-        position.x   += input.style.padding.x.x;
-        position.y   += input.style.padding.y.x + (inner_height - line_height) / 2;
-        element(overwrite(Style.{
-            // TO-DO: we should pick the default selection color per operating system.
-            // We can also query it by the operating system, which sounds like the ideal solution.
-            background = color(hex("#3399FF")),
-            // border_radius = 4.0,
-            placement  = relative(position),
-            width      = fixed(width),
-            height     = fixed(line_height),
-        }, style));
     }
 } @component
 Input_Edit :: struct {
@@ -4408,7 +4429,7 @@ Input :: (style: Style, input_state: *Input_State, body: Code = "", input_charac
     }, style), #code {
         context.input.text_node_index = text(Style.{ z_index = 2, },
                                              to_string(input_state.value.data, input_state.value.count));
-        // Selection(Style.{});
+        Selection(Style.{});
         Caret(Style.{});
         use_scrolling(scrolling_state);
         // use_input();
