@@ -3,7 +3,6 @@ BUILD_FLAGS :: "-output_path .build +forbear";
 #import "Basic";
 #import "File";
 #import "forbear";
-#import "Flat_Pool";
 
 backend: Backend;
 window:  Window;
@@ -20,18 +19,14 @@ main :: () {
     init_window(*backend, *window, 1280, 728, "forbear tests", show_window = false);
 
     forbear: Forbear;
-    init_forbear(*forbear, *backend, *window, Base_Style.{
+    frame_arena: Frame_Arena;
+    init_forbear(*forbear, *frame_arena, *backend, *window, Base_Style.{
         font      = *inter,
         color     = hex("#ECECEC"),
         font_size = 16,
     });
 
     init_font(*inter);
-
-    frame_pool: Flat_Pool;
-    frame_allocator: Allocator;
-    frame_allocator.data = *frame_pool;
-    frame_allocator.proc = flat_pool_allocator_proc;
 
     describe :: (name: string, body: Code) #expand {
         array_add(*context.suites, name);
@@ -53,10 +48,10 @@ main :: () {
         print_test_path(name);
         print("\n");
 
+        push_frame_allocator();
         #insert body;
 
         prepare_for_next_frame();
-        reset(*`frame_pool);
         // If the body of the test ran and got here, it means the asserts succeed.
         // If it had failed, the program would've exited.
         print("  PASS ");
@@ -65,7 +60,7 @@ main :: () {
     }
 
     shallow_node_assert :: (index: s64, kind: Node.Kind, parent_index: s64) #expand {
-        tree := context.forbear.node_tree;
+        tree := context.forbear.node_trees[context.forbear.frame % 2];
         assert(tree[index].kind == kind, "kind=%", tree[index].kind);
         assert(tree[index].parent == parent_index, "parent=%", tree[index].parent);
     }
@@ -77,7 +72,7 @@ main :: () {
         test("components should get a scope node, and its children should be inserted too", #code {
             Root_Component();
 
-            assert(context.forbear.node_tree.count == 2, "count=%", context.forbear.node_tree.count);
+            assert(context.forbear.node_trees[context.forbear.frame % 2].count == 2, "count=%", context.forbear.node_trees[context.forbear.frame % 2].count);
             shallow_node_assert(0, .SCOPE, -1);
             shallow_node_assert(1, .ELEMENT, -1);
         });
@@ -89,7 +84,7 @@ main :: () {
             } @component
             My_Component();
 
-            assert(context.forbear.node_tree.count == 2, "count=%", context.forbear.node_tree.count);
+            assert(context.forbear.node_trees[context.forbear.frame % 2].count == 2, "count=%", context.forbear.node_trees[context.forbear.frame % 2].count);
             shallow_node_assert(0, .SCOPE, -1);
             shallow_node_assert(1, .ELEMENT, -1);
         });
@@ -106,7 +101,7 @@ main :: () {
             assert(calculate_something() == 151512 / 2323, "calculate_something()=%", calculate_something());
             text("%", calculate_something());
 
-            assert(context.forbear.node_tree.count == 3, "count=%", context.forbear.node_tree.count);
+            assert(context.forbear.node_trees[context.forbear.frame % 2].count == 3, "count=%", context.forbear.node_trees[context.forbear.frame % 2].count);
             shallow_node_assert(0, .SCOPE, -1);
             shallow_node_assert(1, .ELEMENT, -1);
             shallow_node_assert(2, .ELEMENT, -1);
@@ -125,7 +120,7 @@ main :: () {
             } @component
             Child_In_Code();
 
-            tree := context.forbear.node_tree;
+            tree := context.forbear.node_trees[context.forbear.frame % 2];
             assert(tree.count == 6, "count=%", tree.count);
             shallow_node_assert(0, .SCOPE, -1);
             shallow_node_assert(1, .ELEMENT, -1);
@@ -151,7 +146,7 @@ main :: () {
                 Child();
             });
 
-            tree := context.forbear.node_tree;
+            tree := context.forbear.node_trees[context.forbear.frame % 2];
             assert(tree.count == 6, "count=%", tree.count);
             shallow_node_assert(0, .SCOPE, -1);
             shallow_node_assert(1, .ELEMENT, -1);
@@ -177,7 +172,7 @@ main :: () {
             click_message := Button();
             assert(click_message == "oh no, you've not been clicked", "click_message == %", click_message);
 
-            tree := context.forbear.node_tree;
+            tree := context.forbear.node_trees[context.forbear.frame % 2];
             assert(tree.count == 2, "count=%", tree.count);
             shallow_node_assert(0, .SCOPE, -1);
             shallow_node_assert(1, .ELEMENT, -1);
@@ -202,7 +197,7 @@ main :: () {
         end_x:   float;
     }
     wrapped_lines :: (text_index: s64) -> [..]Wrapped_Line {
-        node    := *context.forbear.node_tree[text_index];
+        node    := *context.forbear.node_trees[context.forbear.frame % 2][text_index];
         lines   : [..]Wrapped_Line;
         builder : String_Builder;
         for glyph: node.shaping_run.glyphs {
@@ -272,7 +267,7 @@ main :: () {
             narrow := wrap_arrangement("a b c", .WORD, 1);
             wide   := wrap_arrangement("a b c", .WORD, 1000);
             layout();
-            tree := context.forbear.node_tree;
+            tree := context.forbear.node_trees[context.forbear.frame % 2];
             assert(tree[narrow].shaping_run.glyphs.data == tree[wide].shaping_run.glyphs.data, "expected both nodes to share the cached shaping run");
             expect_lines(narrow, "a ", "b ", "c");
             expect_lines(wide, "a b c");
@@ -283,7 +278,7 @@ main :: () {
             center := wrap_arrangement("a bb ccc", .WORD, 1, .CENTER);
             end    := wrap_arrangement("a bb ccc", .WORD, 1, .END);
             layout();
-            tree := context.forbear.node_tree;
+            tree := context.forbear.node_trees[context.forbear.frame % 2];
             node := tree[start];
             line_end := node.size.x / get_font_units_to_pixel(node.style.font, node.style.font_size);
             assert(wrapped_lines(start).count == 3, "expected 3 lines, got %", wrapped_lines(start));
@@ -305,13 +300,14 @@ main :: () {
     describe("shaping cache", #code {
         CACHED :: "cached across frames";
         expected_glyphs : [..]s32;
+        expected_glyphs.allocator = context.allocator;
         over_budget     := alloc_string(Shaping_Cache.BUDGET / size_of(Glyph) + 1);
         memset(over_budget.data, #char "a", over_budget.count);
         first_cache: s64;
         test("shaping text for the first time", #code {
             first_cache = context.forbear.shaping_cache_current;
             index      := text(CACHED);
-            for context.forbear.node_tree[index].shaping_run.glyphs  array_add(*expected_glyphs, it.index);
+            for context.forbear.node_trees[context.forbear.frame % 2][index].shaping_run.glyphs  array_add(*expected_glyphs, it.index);
             text(over_budget);
         });
         test("carrying a run over from the previous cache", #code {
@@ -323,14 +319,14 @@ main :: () {
             assert(context.forbear.shaping_cache_current == first_cache, "expected the first cache to be reused");
             for 0..20  text("different text number % to fill the pool", it);
             index  := text(CACHED);
-            glyphs := context.forbear.node_tree[index].shaping_run.glyphs;
+            glyphs := context.forbear.node_trees[context.forbear.frame % 2][index].shaping_run.glyphs;
             assert(glyphs.count == expected_glyphs.count, "expected % glyphs, got %", expected_glyphs.count, glyphs.count);
             for glyphs  assert(it.index == expected_glyphs[it_index], "glyph %: expected index %, got %", it_index, expected_glyphs[it_index], it.index);
         });
         test("line heights less than a font unit apart get their own runs", #code {
             a    := text(Style.{ line_height = line_height_percentage(1.0) }, CACHED);
             b    := text(Style.{ line_height = line_height_percentage(1.0001) }, CACHED);
-            tree := context.forbear.node_tree;
+            tree := context.forbear.node_trees[context.forbear.frame % 2];
             assert(tree[a].shaping_run.line_height != tree[b].shaping_run.line_height, "expected different line heights, both got %", tree[a].shaping_run.line_height);
         });
     });

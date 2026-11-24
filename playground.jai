@@ -4,11 +4,8 @@ BUILD_FLAGS :: "-output_path .build +forbear +Iprof -modules";
 
 #import "Basic"()(MEMORY_DEBUGGER = MEMORY_DEBUGGING);
 #import "File";
-#import "Flat_Pool";
 #import "GL";
 #import "forbear";
-
-frame_pool: Flat_Pool;
 
 Fps_Monitor :: () {
     frames   := state(float64);
@@ -46,6 +43,7 @@ Fps_Monitor :: () {
 } @component
 
 render :: (data: *void) {
+    push_frame_allocator();
     defer prepare_for_next_frame();
 
     element(Style.{
@@ -124,7 +122,6 @@ END);
     if MEMORY_DEBUGGING {
         memory_visualizer_per_frame_update();
     }
-    reset(*frame_pool);
     #if #exists(__Iprof) {
         context._Iprof.update(true);
     }
@@ -139,7 +136,8 @@ main :: () {
     inter := #run create_font(read_entire_file(tprint("%Inter.ttf", #filepath)));
 
     forbear: Forbear;
-    init_forbear(*forbear, *backend, *window, Base_Style.{
+    frame_arena: Frame_Arena;
+    init_forbear(*forbear, *frame_arena, *backend, *window, Base_Style.{
         font = *inter,
         color = rgb(255, 255, 255),
         language = .ENGLISH,
@@ -147,15 +145,12 @@ main :: () {
     });
     init_font(*inter);
 
-    frame_allocator: Allocator;
-    frame_allocator.data = *frame_pool;
-    frame_allocator.proc = flat_pool_allocator_proc;
     #if OS == .WINDOWS || OS == .MACOS {
         backend.render = render;
     }
 
     while window.running {
-        push_allocator(frame_allocator);
+        push_frame_allocator();
 
         #if OS == .LINUX {
             while true {

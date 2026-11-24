@@ -319,7 +319,7 @@ Math :: #import "Math";
     #insert #run,host -> string { #import "Basic"; return tprint("#import,file \"%forbear.jai\"(C_ABI = true, JAVASCRIPT_ADAPTER = JAVASCRIPT);", #filepath); };
 
     frame_context: #Context;
-    frame_pool:  Flat_Pool;
+    frame_arena:   Frame_Arena;
 
     #program_export
     fb_init_forbear :: (forbear:            *Forbear,
@@ -328,10 +328,9 @@ Math :: #import "Math";
                         program_base_style: Base_Style) #c_call {
         push_context frame_context { // at this point, it's just the default context
             forbear.* = .{};
-            init_forbear(forbear, program_backend, program_window, program_base_style);
+            init_forbear(forbear, *frame_arena, program_backend, program_window, program_base_style);
 
-            frame_context.allocator.data = *frame_pool;
-            frame_context.allocator.proc = flat_pool_allocator_proc;
+            frame_context.allocator = frame_arena.allocator;
         }
     }
     #program_export
@@ -402,8 +401,6 @@ Math :: #import "Math";
     fb_prepare_for_next_frame :: () #c_call {
         push_context frame_context {
             prepare_for_next_frame();
-            reset_temporary_storage();
-            reset(*frame_pool);
         }
     }
 
@@ -588,10 +585,10 @@ Math :: #import "Math";
     fb_complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) #c_call { push_context frame_context { complete_with(style, base, out); } }
 
     #program_export
-    fb_get_measurement :: (node_index: s64, include_scopes: bool, out: *Node_Measurement) -> bool #c_call {
+    fb_get_previous_node :: (node_index: s64, include_scopes: bool, out: *Node) -> bool #c_call {
         push_context frame_context {
             defined: bool;
-            out.*, defined = get_measurement(node_index, include_scopes);
+            out.*, defined = get_previous_node(node_index, include_scopes);
             return defined;
         }
     }
