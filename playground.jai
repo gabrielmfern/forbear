@@ -21,16 +21,15 @@ Fps_Monitor :: () {
     }
 
     element(Style.{ width = grow(), y_justification = .CENTER }, #code {
-        element(Style.{ font_size = 28, color = rgb(255, 255, 255) }, #code {
+        element(Style.{ font_size = 32 }, #code {
             text("forbear");
         });
         element(Style.{ width = grow() });
         element(Style.{
-            background    = color(rgb(17, 19, 22)),
+            background    = color(rgb(239, 239, 239)),
             text_wrapping = .NONE,
             min_width     = 152,
             padding       = all(8),
-            color         = rgb(184, 163, 106),
             direction     = .VERTICAL,
         }, #code {
             element(Style.{ width = grow() }, #code {
@@ -42,6 +41,8 @@ Fps_Monitor :: () {
     });
 } @component
 
+SAM_QUOTE :: "I know. It's all wrong. By rights we shouldn't even be here. But we are. It's like in the great stories, Mr. Frodo. The ones that really mattered. Full of darkness and danger, they were. And sometimes you didn't want to know the end. Because how could the end be happy? How could the world go back to the way it was when so much bad had happened? But in the end, it's only a passing thing, this shadow. Even darkness must pass. A new day will come. And when the sun shines it will shine out the clearer. Those were the stories that stayed with you. That meant something, even if you were too small to understand why. But I think, Mr. Frodo, I do understand. I know now. Folk in those stories had lots of chances of turning back, only they didn't. They kept going. Because they were holding on to something.";
+
 render :: (data: *void) {
     push_frame_allocator();
     defer prepare_for_next_frame();
@@ -49,19 +50,17 @@ render :: (data: *void) {
     element(Style.{
         width           = grow(),
         height          = grow(),
-        background      = color(rgb(28, 31, 35)),
-        color           = rgb(174, 184, 196),
-        font_size       = 14,
-        padding         = all(16),
+        background      = color(rgb(255, 255, 255)),
+        color           = rgb(0, 0, 0),
+        font_size       = 16,
+        padding         = all(8),
         text_wrapping   = .CHARACTER,
         direction       = .VERTICAL,
     }, #code {
-        use_scrolling();
-
         input := state([..]u8);
 
+        use_scrolling();
         Fps_Monitor();
-
         element(Style.{
             background = color(rgb(255, 0, 0)),
             width = fixed(200),
@@ -69,54 +68,19 @@ render :: (data: *void) {
         }, #code {
             node := get_node();
             if is_mouse_held() && is_mouse_inside() {
-                node.style.background = color(rgb(255, 255, 255));
+                node.style.background = color(rgb(0, 0, 0));
             }
             if is_key_held(.SHIFT_LEFT) {
                 node.style.background = color(rgb(100, 100, 0));
             }
         });
 
-        frame_input := get_text_input();
-        if frame_input.count > 0 {
-            print("frame_input: %\n", frame_input);
-            array_add(input, ..(cast([] u8) frame_input));
-            print("input: %\n", to_string(input.data, input.count));
-        }
-        text("this was the input text until now: '%'", to_string(input.data, input.count));
-
-        if on_paste() {
-            get_clipboard_text();
-            print("pasting, this should happen");
-        }
-
-        for key: context.forbear.window.keyboard_state.held {
-            if key != 0 {
-                string_key := sprint("%", key);
-                text(string_key, key = string_key);
-            }
-        }
-
-        for label: string.["a", "b"] {
-            element(Style.{}, key = label, #code {
-                count := state(0);
-                if on_click() {
-                    count.* += 1;
-                }
-                text("% %", label, count.*);
-            });
-        }
-
-        text(Style.{ text_wrapping = .WORD }, #string END
-Sam: Tá tudo errado. Por direito, a gente nem devia estar aqui. Mas estamos. É tipo nas grandes histórias, Sr. Frodo. Aquelas que realmente importavam. Cheias de escuridão e perigo, eram elas, e às vezes você nem queria saber o final. Porque como o final poderia ser feliz? Como o mundo poderia voltar a ser como era, depois de tanta coisa ruim? Mas no fim, é só uma coisa passageira, essa sombra. Até a escuridão tem que passar. Um novo dia vai chegar. E quando o sol brilhar, vai brilhar mais forte. Essas eram as histórias que ficavam com você. Que significavam alguma coisa. Mesmo que você fosse pequeno demais pra entender o porquê. Mas eu acho, Sr. Frodo, que eu entendo. Eu sei agora. O povo nessas histórias tinha várias chances de voltar atrás, mas não voltava. Porque eles estavam se agarrando a alguma coisa.
-
-Frodo: O que a gente tá se agarrando, Sam?
-
-Sam: Que existe um pouco de bondade nesse mundo, Sr. Frodo. E que vale a pena lutar por ela.
-END);
+        input_state := use_input_state(SAM_QUOTE, 80);
+        Input(Style.{ width = fixed(500), text_wrapping = .WORD, height = fit() }, input_state);
     });
 
     layout();
-    draw(rgb(0.0, 0.0, 0.0));
+    draw(rgb(1.0, 1.0, 1.0));
 
     reset_temporary_storage();
     if MEMORY_DEBUGGING {
@@ -139,7 +103,7 @@ main :: () {
     frame_arena: Frame_Arena;
     init_forbear(*forbear, *frame_arena, *backend, *window, Base_Style.{
         font = *inter,
-        color = rgb(255, 255, 255),
+        color = rgb(0, 0, 0),
         language = .ENGLISH,
         text_direction = .LEFT_TO_RIGHT,
     });
