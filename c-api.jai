@@ -585,12 +585,8 @@ Math :: #import "Math";
     fb_complete_with :: (style: Style, base: Base_Style, out: *Complete_Style) #c_call { push_context frame_context { complete_with(style, base, out); } }
 
     #program_export
-    fb_get_previous_node :: (node_index: s64, include_scopes: bool, out: *Node) -> bool #c_call {
-        push_context frame_context {
-            defined: bool;
-            out.*, defined = get_previous_node(node_index, include_scopes);
-            return defined;
-        }
+    fb_get_previous_node :: (node_index: s64, include_scopes: bool) -> *Node #c_call {
+        push_context frame_context { return get_previous_node(node_index, include_scopes); }
     }
 
     #program_export

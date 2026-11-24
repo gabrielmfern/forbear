@@ -3630,7 +3630,7 @@ Node :: struct {
 
     tree: *Node_Tree;
 };
-get_previous_node :: (specified_node_index: s64 = -1, include_scopes := false) -> node: Node, defined: bool {
+get_previous_node :: (specified_node_index: s64 = -1, include_scopes := false) -> *Node {
     using context.forbear;
     node_tree := node_trees[frame % 2];
     previous_node_tree := node_trees[1 - frame % 2];
@@ -3642,7 +3642,7 @@ get_previous_node :: (specified_node_index: s64 = -1, include_scopes := false) -
     if node_index != -1 {
         expected_key := node_tree[node_index].key;
         if node_index < previous_node_tree.count && previous_node_tree[node_index].key == expected_key {
-            return previous_node_tree[node_index], true;
+            return *previous_node_tree[node_index];
         } else {
             // I don't think we should sort these measurements by keys because that would be making the normal case
             // slower in favor of a case that should be rare as I expect things to be.
@@ -3650,15 +3650,15 @@ get_previous_node :: (specified_node_index: s64 = -1, include_scopes := false) -
             // TO-DO(depessimization): we should store the previous_index in open_element(), then look up based on that here.
             // There, if the indices don't match, we should iterate to find the index
             // TO-DO(optimization): we should store a contiguous array of the keys of the previous frame's node tree's keys
-            for measurement_by_index: previous_node_tree {
-                if measurement_by_index.key == expected_key {
-                    return measurement_by_index, true;
+            for *previous_node: previous_node_tree {
+                if previous_node.key == expected_key {
+                    return previous_node;
                 }
             }
-            return Node.{}, false;
+            return null;
         }
     } else {
-        return Node.{}, false;
+        return null;
     }
 }
 node_pool_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s64, old_memory: *void, allocator_data: *void) -> *void {
@@ -3675,8 +3675,8 @@ node_pool :: () -> Allocator {
     node      := *node_trees[frame % 2][parent_index];
     pool_slot := node.pool_slot;
     if pool_slot == -1 {
-        previous_node, defined := get_previous_node(include_scopes = true);
-        if defined {
+        previous_node := get_previous_node(include_scopes = true);
+        if previous_node != null {
             pool_slot = previous_node.pool_slot;
         }
     }
@@ -3727,8 +3727,8 @@ state :: (initial_size: s64, initial: *void) -> *void, first_frame: bool {
     result := *state_buffers.*[frame % 2][state_used];
     if initial memcpy(result, initial, initial_size);
     else       memset(result, 0, initial_size);
-    previous_node, defined := get_previous_node(include_scopes = true);
-    copy_forward         := defined && node.state_size + size <= previous_node.state_size;
+    previous_node := get_previous_node(include_scopes = true);
+    copy_forward  := previous_node != null && node.state_size + size <= previous_node.state_size;
     if copy_forward {
         memcpy(result, *state_buffers.*[1 - frame % 2][previous_node.state_offset + node.state_size], initial_size);
     }
@@ -3857,13 +3857,13 @@ use_scrolling :: (using state: *Scrolling_State) {
     if is_mouse_inside() {
         offset += get_scroll_delta();
     }
-    node                 := get_node();
-    previous_node, defined := get_previous_node();
+    node          := get_node();
+    previous_node := get_previous_node();
     limit_x := FLOAT32_NAN;
     limit_y := FLOAT32_NAN;
     if scheduled_scroll.defined && scheduled_scroll.defined_this_frame {
         scheduled_scroll.defined_this_frame = false;
-    } else if scheduled_scroll.defined && defined {
+    } else if scheduled_scroll.defined && previous_node != null {
         visible := Vector2.{
             previous_node.size.x - node.style.padding.x.x - node.style.padding.x.y,
             previous_node.size.y - node.style.padding.y.x - node.style.padding.y.y,
@@ -3876,7 +3876,7 @@ use_scrolling :: (using state: *Scrolling_State) {
         if !scheduled_scroll.animate then effective_offset = offset;
         scheduled_scroll.defined = false;
     }
-    if defined {
+    if previous_node != null {
         limit_x = max(  previous_node.content_size.x
                        - previous_node.size.x
                        + node.style.padding.x.x
@@ -4167,9 +4167,9 @@ get_mouse_position :: () -> Vector2 {
 }
 is_mouse_inside :: () -> bool {
     using context.forbear;
-    previous_node, defined := get_previous_node();
-    position             := get_mouse_position();
-    return defined && window.mouse_state.inside && is_point_inside(position, previous_node);
+    previous_node := get_previous_node();
+    position      := get_mouse_position();
+    return previous_node != null && window.mouse_state.inside && is_point_inside(position, previous_node);
 }
 is_mouse_held :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
@@ -4184,7 +4184,7 @@ on_mouse_down :: (button := Mouse_Button.LEFT, check_inside := true) -> bool {
 on_mouse_up :: (button := Mouse_Button.LEFT, check_inside := true) -> bool {
     return context.forbear.window.mouse_state.released[button] && (!check_inside || is_mouse_inside());
 }
-is_point_inside :: (point: Vector2, node: Node) -> bool {
+is_point_inside :: (point: Vector2, node: *Node) -> bool {
     return point.x >= node.position.x
         && point.y >= node.position.y
         && point.x <= node.position.x + node.size.x
@@ -4195,8 +4195,8 @@ get_press_position :: (button := Mouse_Button.LEFT) -> Vector2 {
 }
 is_dragging :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
-    previous_node, defined := get_previous_node();
-    if defined {
+    previous_node := get_previous_node();
+    if previous_node != null {
         press_position := window.mouse_state.press_position[button];
         mouse          := get_mouse_position();
         delta          := mouse - press_position;
@@ -4209,8 +4209,8 @@ is_dragging :: (button := Mouse_Button.LEFT) -> bool {
 on_click :: (button := Mouse_Button.LEFT, check_inside := true, movement_threshold := false) -> bool {
     using context.forbear;
     if on_mouse_up(button, check_inside) {
-        previous_node, defined := get_previous_node();
-        assert(defined, "the measurement should exist if is_mouse_inside is true");
+        previous_node := get_previous_node();
+        assert(previous_node != null, "the previous node should exist if is_mouse_inside is true");
         mouse          := get_mouse_position();
         press_position := window.mouse_state.press_position[button];
         delta          := mouse - press_position;
@@ -4587,9 +4587,9 @@ close_element :: (using data: Node_Opening_Data) {
     node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
     node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
 
-    previous_node, defined := get_previous_node();
+    previous_node := get_previous_node();
     assert(
-        !defined || node.state_size == previous_node.state_size,
+        previous_node == null || node.state_size == previous_node.state_size,
         "element called state() a different number of times than last frame"
     );
 
@@ -4705,9 +4705,9 @@ open_scope :: (key := "", location := #caller_location) -> Node_Opening_Data {
     return open_scope(key_hash);
 }
 close_scope :: (using opening_data: Node_Opening_Data, value: $T) -> T {
-    previous_node, defined := get_previous_node(include_scopes = true);
+    previous_node := get_previous_node(include_scopes = true);
     assert(
-        !defined || context.forbear.node_trees[context.forbear.frame % 2][node_index].state_size == previous_node.state_size,
+        previous_node == null || context.forbear.node_trees[context.forbear.frame % 2][node_index].state_size == previous_node.state_size,
         "scope called state() a different number of times than last frame"
     );
 
