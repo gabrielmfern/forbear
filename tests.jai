@@ -14,6 +14,7 @@ Root_Component :: () {
     text("hey");
 } @component
 
+#add_context suites: [..]string;
 main :: () {
     init_backend(*backend);
     init_window(*backend, *window, 1280, 728, "forbear tests", show_window = false);
@@ -32,35 +33,56 @@ main :: () {
     frame_allocator.data = *frame_pool;
     frame_allocator.proc = flat_pool_allocator_proc;
 
-    test_frame :: (name: string, body: Code) #expand {
-        print("RUN  %\n", name);
+    describe :: (name: string, body: Code) #expand {
+        array_add(*context.suites, name);
+        defer pop(*context.suites);
+
+        #insert body;
+    }
+    print_test_path :: (name: string) {
+        for context.suites {
+            print(it);
+            print(" ");
+            if it_index == context.suites.count - 1 {
+                print(name);
+            }
+        }
+    }
+    test :: (name: string, body: Code) #expand {
+        print("  RUN ");
+        print_test_path(name);
+        print("\n");
+
         #insert body;
 
         prepare_for_next_frame();
         reset(*`frame_pool);
         // If the body of the test ran and got here, it means the asserts succeed.
         // If it had failed, the program would've exited.
-        print("    PASS %\n", name);
+        print("  PASS ");
+        print_test_path(name);
+        print("\n");
     }
-    shallow_node_check :: (index: s64, kind: Node.Kind, parent_index: s64) #expand {
+
+    shallow_node_assert :: (index: s64, kind: Node.Kind, parent_index: s64) #expand {
         tree := context.forbear.node_tree;
         assert(tree[index].kind == kind, "kind=%", tree[index].kind);
         assert(tree[index].parent == parent_index, "parent=%", tree[index].parent);
     }
 
-    {
+    describe("compiler plugin", #code {
         //
         // ==== compiler plugin tests ====
         //
-        test_frame("compiler plugin: components should get a scope node, and its children should be inserted too", #code {
+        test("components should get a scope node, and its children should be inserted too", #code {
             Root_Component();
 
             assert(context.forbear.node_tree.count == 2, "count=%", context.forbear.node_tree.count);
-            shallow_node_check(0, .SCOPE, -1);
-            shallow_node_check(1, .ELEMENT, -1);
+            shallow_node_assert(0, .SCOPE, -1);
+            shallow_node_assert(1, .ELEMENT, -1);
         });
 
-        test_frame("compiler plugin: local components should get a scope node, and its children should be inserted too", #code {
+        test("local components should get a scope node, and its children should be inserted too", #code {
             My_Component :: () {
                 print("my component ran\n");
                 text("My_Component did run\n");
@@ -68,11 +90,11 @@ main :: () {
             My_Component();
 
             assert(context.forbear.node_tree.count == 2, "count=%", context.forbear.node_tree.count);
-            shallow_node_check(0, .SCOPE, -1);
-            shallow_node_check(1, .ELEMENT, -1);
+            shallow_node_assert(0, .SCOPE, -1);
+            shallow_node_assert(1, .ELEMENT, -1);
         });
 
-        test_frame("compiler plugin: components shuold work just fine with other local procedures", #code {
+        test("components shuold work just fine with other local procedures", #code {
             My_Component :: () {
                 print("My Component did run\n");
                 text("hey");
@@ -85,12 +107,12 @@ main :: () {
             text("%", calculate_something());
 
             assert(context.forbear.node_tree.count == 3, "count=%", context.forbear.node_tree.count);
-            shallow_node_check(0, .SCOPE, -1);
-            shallow_node_check(1, .ELEMENT, -1);
-            shallow_node_check(2, .ELEMENT, -1);
+            shallow_node_assert(0, .SCOPE, -1);
+            shallow_node_assert(1, .ELEMENT, -1);
+            shallow_node_assert(2, .ELEMENT, -1);
         });
 
-        test_frame("compiler plugin: components called inside #code should get a scope node, so their elements get different keys", #code {
+        test("components called inside #code should get a scope node, so their elements get different keys", #code {
             Child_In_Code :: () {
                 Child :: () {
                     element(Style.{width = fixed(10), height = fixed(10)});
@@ -105,16 +127,16 @@ main :: () {
 
             tree := context.forbear.node_tree;
             assert(tree.count == 6, "count=%", tree.count);
-            shallow_node_check(0, .SCOPE, -1);
-            shallow_node_check(1, .ELEMENT, -1);
-            shallow_node_check(2, .SCOPE, 1);
-            shallow_node_check(3, .ELEMENT, 1);
-            shallow_node_check(4, .SCOPE, 1);
-            shallow_node_check(5, .ELEMENT, 1);
+            shallow_node_assert(0, .SCOPE, -1);
+            shallow_node_assert(1, .ELEMENT, -1);
+            shallow_node_assert(2, .SCOPE, 1);
+            shallow_node_assert(3, .ELEMENT, 1);
+            shallow_node_assert(4, .SCOPE, 1);
+            shallow_node_assert(5, .ELEMENT, 1);
             assert(tree[3].key != tree[5].key, "both children have key %", tree[3].key);
         });
 
-        test_frame("compiler plugin: local macros inside #code should keep their elements", #code {
+        test("local macros inside #code should keep their elements", #code {
             Child :: () {
                 element(Style.{width = fixed(10), height = fixed(10)});
             } @component
@@ -131,15 +153,15 @@ main :: () {
 
             tree := context.forbear.node_tree;
             assert(tree.count == 6, "count=%", tree.count);
-            shallow_node_check(0, .SCOPE, -1);
-            shallow_node_check(1, .ELEMENT, -1);
-            shallow_node_check(2, .SCOPE, -1);
-            shallow_node_check(3, .ELEMENT, -1);
-            shallow_node_check(4, .SCOPE, 3);
-            shallow_node_check(5, .ELEMENT, 3);
+            shallow_node_assert(0, .SCOPE, -1);
+            shallow_node_assert(1, .ELEMENT, -1);
+            shallow_node_assert(2, .SCOPE, -1);
+            shallow_node_assert(3, .ELEMENT, -1);
+            shallow_node_assert(4, .SCOPE, 3);
+            shallow_node_assert(5, .ELEMENT, 3);
         });
 
-        test_frame("compiler plugin: components that return values should work", #code {
+        test("components that return values should work", #code {
             Button :: () -> string {
                 clicked := false;
                 element(Style.{width = fixed(10), height = fixed(10)}, #code {
@@ -157,45 +179,46 @@ main :: () {
 
             tree := context.forbear.node_tree;
             assert(tree.count == 2, "count=%", tree.count);
-            shallow_node_check(0, .SCOPE, -1);
-            shallow_node_check(1, .ELEMENT, -1);
+            shallow_node_assert(0, .SCOPE, -1);
+            shallow_node_assert(1, .ELEMENT, -1);
         });
+    });
+
+    wrap_arrangement :: (content:  string,
+                         wrapping: Text_Wrapping,
+                         width:    float,
+                         x_justification := Alignment.START) -> text_index: s64 {
+        parent := open_element(
+            Style.{ width = fixed(width), text_wrapping = wrapping, x_justification = x_justification },
+            tprint("%-%-%-%", content, wrapping, width, x_justification),
+        );
+        text_index := text(Style.{}, content);
+        close_element(parent);
+        return text_index;
+    }
+    Wrapped_Line :: struct {
+        text:    string;
+        start_x: float;
+        end_x:   float;
+    }
+    wrapped_lines :: (text_index: s64) -> [..]Wrapped_Line {
+        node    := *context.forbear.node_tree[text_index];
+        lines   : [..]Wrapped_Line;
+        builder : String_Builder;
+        for glyph: node.shaping_run.glyphs {
+            position := node.glyph_positions[it_index];
+            if it_index == 0 || position.y != node.glyph_positions[it_index - 1].y {
+                if lines.count > 0  lines[lines.count - 1].text = builder_to_string(*builder);
+                array_add(*lines, .{ start_x = position.x });
+            }
+            append(*builder, to_string(node.shaping_run.text.data + glyph.index_into_original_text, 1));
+            lines[lines.count - 1].end_x = position.x + glyph.advance.x;
+        }
+        if lines.count > 0  lines[lines.count - 1].text = builder_to_string(*builder);
+        return lines;
     }
 
-    {
-        wrap_arrangement :: (content:  string,
-                             wrapping: Text_Wrapping,
-                             width:    float,
-                             x_justification := Alignment.START) -> text_index: s64 {
-            parent := open_element(
-                Style.{ width = fixed(width), text_wrapping = wrapping, x_justification = x_justification },
-                tprint("%-%-%-%", content, wrapping, width, x_justification),
-            );
-            text_index := text(Style.{}, content);
-            close_element(parent);
-            return text_index;
-        }
-        Wrapped_Line :: struct {
-            text:    string;
-            start_x: float;
-            end_x:   float;
-        }
-        wrapped_lines :: (text_index: s64) -> [..]Wrapped_Line {
-            node    := *context.forbear.node_tree[text_index];
-            lines   : [..]Wrapped_Line;
-            builder : String_Builder;
-            for glyph: node.shaping_run.glyphs {
-                position := node.glyph_positions[it_index];
-                if it_index == 0 || position.y != node.glyph_positions[it_index - 1].y {
-                    if lines.count > 0  lines[lines.count - 1].text = builder_to_string(*builder);
-                    array_add(*lines, .{ start_x = position.x });
-                }
-                append(*builder, to_string(node.shaping_run.text.data + glyph.index_into_original_text, 1));
-                lines[lines.count - 1].end_x = position.x + glyph.advance.x;
-            }
-            if lines.count > 0  lines[lines.count - 1].text = builder_to_string(*builder);
-            return lines;
-        }
+    describe("test wrapping", #code {
         expect_lines :: (text_index: s64, expected: ..string) {
             lines := wrapped_lines(text_index);
             assert(lines.count == expected.count, "expected % lines %, got %", expected.count, expected, lines);
@@ -205,37 +228,37 @@ main :: () {
         //
         // ==== text wrapping tests ====
         //
-        test_frame("text wrapping: WORD keeps text on one line when it fits", #code {
+        test("WORD keeps text on one line when it fits", #code {
             text_index := wrap_arrangement("a b c", .WORD, 1000);
             layout();
             expect_lines(text_index, "a b c");
         });
 
-        test_frame("text wrapping: WORD breaks after spaces when the width is too small", #code {
+        test("WORD breaks after spaces when the width is too small", #code {
             text_index := wrap_arrangement("a b c", .WORD, 1);
             layout();
             expect_lines(text_index, "a ", "b ", "c");
         });
 
-        test_frame("text wrapping: WORD never breaks inside a word", #code {
+        test("WORD never breaks inside a word", #code {
             text_index := wrap_arrangement("abc def", .WORD, 1);
             layout();
             expect_lines(text_index, "abc ", "def");
         });
 
-        test_frame("text wrapping: CHARACTER breaks between any characters", #code {
+        test("CHARACTER breaks between any characters", #code {
             text_index := wrap_arrangement("abc", .CHARACTER, 1);
             layout();
             expect_lines(text_index, "a", "b", "c");
         });
 
-        test_frame("text wrapping: NONE never breaks on width", #code {
+        test("NONE never breaks on width", #code {
             text_index := wrap_arrangement("a b c", .NONE, 1);
             layout();
             expect_lines(text_index, "a b c");
         });
 
-        test_frame("text wrapping: line breaks always break, for every wrapping mode", #code {
+        test("line breaks always break, for every wrapping mode", #code {
             word      := wrap_arrangement("a\nb", .WORD, 1000);
             character := wrap_arrangement("a\nb", .CHARACTER, 1000);
             none      := wrap_arrangement("a\nb", .NONE, 1000);
@@ -245,7 +268,7 @@ main :: () {
             expect_lines(none, "a", "b");
         });
 
-        test_frame("text wrapping: same text at different widths in the same frame wraps independently", #code {
+        test("same text at different widths in the same frame wraps independently", #code {
             narrow := wrap_arrangement("a b c", .WORD, 1);
             wide   := wrap_arrangement("a b c", .WORD, 1000);
             layout();
@@ -255,7 +278,7 @@ main :: () {
             expect_lines(wide, "a b c");
         });
 
-        test_frame("text wrapping: justification aligns every wrapped line inside the node", #code {
+        test("justification aligns every wrapped line inside the node", #code {
             start  := wrap_arrangement("a bb ccc", .WORD, 1, .START);
             center := wrap_arrangement("a bb ccc", .WORD, 1, .CENTER);
             end    := wrap_arrangement("a bb ccc", .WORD, 1, .END);
@@ -277,46 +300,43 @@ main :: () {
                 assert(close(line.end_x, line_end), "END line \"%\" ends at %, expected %", line.text, line.end_x, line_end);
             }
         });
-    }
+    });
 
-    {
-        //
-        // ==== shaping cache tests ====
-        //
+    describe("shaping cache", #code {
         CACHED :: "cached across frames";
-        expected_glyphs: [..]s32;
-        over_budget := alloc_string(Shaping_Cache.BUDGET / size_of(Glyph) + 1);
+        expected_glyphs : [..]s32;
+        over_budget     := alloc_string(Shaping_Cache.BUDGET / size_of(Glyph) + 1);
         memset(over_budget.data, #char "a", over_budget.count);
         first_cache: s64;
-        test_frame("shaping cache: shaping text for the first time", #code {
+        test("shaping text for the first time", #code {
             first_cache = context.forbear.shaping_cache_current;
-            index := text(CACHED);
+            index      := text(CACHED);
             for context.forbear.node_tree[index].shaping_run.glyphs  array_add(*expected_glyphs, it.index);
             text(over_budget);
         });
-        test_frame("shaping cache: carrying a run over from the previous cache", #code {
+        test("carrying a run over from the previous cache", #code {
             assert(context.forbear.shaping_cache_current != first_cache, "expected going over budget to swap caches");
             text(CACHED);
             text(over_budget);
         });
-        test_frame("shaping cache: a run carried over twice survives new text shaped into the reused pool", #code {
+        test("a run carried over twice survives new text shaped into the reused pool", #code {
             assert(context.forbear.shaping_cache_current == first_cache, "expected the first cache to be reused");
             for 0..20  text("different text number % to fill the pool", it);
-            index := text(CACHED);
+            index  := text(CACHED);
             glyphs := context.forbear.node_tree[index].shaping_run.glyphs;
             assert(glyphs.count == expected_glyphs.count, "expected % glyphs, got %", expected_glyphs.count, glyphs.count);
             for glyphs  assert(it.index == expected_glyphs[it_index], "glyph %: expected index %, got %", it_index, expected_glyphs[it_index], it.index);
         });
-        test_frame("shaping cache: line heights less than a font unit apart get their own runs", #code {
-            a := text(Style.{ line_height = line_height_percentage(1.0) }, CACHED);
-            b := text(Style.{ line_height = line_height_percentage(1.0001) }, CACHED);
+        test("line heights less than a font unit apart get their own runs", #code {
+            a    := text(Style.{ line_height = line_height_percentage(1.0) }, CACHED);
+            b    := text(Style.{ line_height = line_height_percentage(1.0001) }, CACHED);
             tree := context.forbear.node_tree;
             assert(tree[a].shaping_run.line_height != tree[b].shaping_run.line_height, "expected different line heights, both got %", tree[a].shaping_run.line_height);
         });
-    }
+    });
 
-    {
-        test_frame("node pool: only the last array in a pool grows in place, and its neighbors survive", #code {
+    describe("node pool", #code {
+        test("only the last array in a pool grows in place, and its neighbors survive", #code {
             parent := open_element(Style.{}, "node pool growth");
             first  := state([..]s64);
             second := state([..]s64);
@@ -327,9 +347,10 @@ main :: () {
             for 8..15  array_add(first, it);
             close_element(parent);
             assert(second.data == second_data, "expected the last array in the pool to grow in place");
-            assert(first.count == 16 && second.count == 16, "expected 16 items in each, got % and %", first.count, second.count);
+            assert(   first.count == 16
+                   && second.count == 16, "expected 16 items in each, got % and %", first.count, second.count);
             for first.*   assert(it == it_index, "first[%]: expected %, got %", it_index, it_index, it);
             for second.*  assert(it == 100 + it_index, "second[%]: expected %, got %", it_index, 100 + it_index, it);
         });
-    }
+    });
 }
