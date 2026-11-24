@@ -17,9 +17,10 @@ winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsof
 '@
 }
 
-$ref = if ($env:FORBEAR_REF) { $env:FORBEAR_REF } else { 'master' }
+$tag = (Invoke-RestMethod 'https://api.github.com/repos/gabrielmfern/forbear/releases/latest').tag_name
+$ref = if ($env:FORBEAR_REF) { $env:FORBEAR_REF } else { $tag }
 $base = "https://raw.githubusercontent.com/gabrielmfern/forbear/$ref"
-$release = 'https://github.com/gabrielmfern/forbear/releases/latest/download'
+$release = "https://github.com/gabrielmfern/forbear/releases/download/$tag"
 $main = if ($language -eq 'jai') { 'main.jai' } else { 'main.c' }
 $forbear = if ($language -eq 'jai') { 'modules/forbear' } else { 'forbear' }
 

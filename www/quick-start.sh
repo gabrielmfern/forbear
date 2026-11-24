@@ -24,8 +24,10 @@ if [ "$(uname -s)" = Linux ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
   echo "Warning: forbear needs Wayland on Linux, and WAYLAND_DISPLAY is not set, so your program won't open a window." >&2
 fi
 
-base=https://raw.githubusercontent.com/gabrielmfern/forbear/${FORBEAR_REF:-master}
-release=https://github.com/gabrielmfern/forbear/releases/latest/download
+tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/gabrielmfern/forbear/releases/latest)
+tag=${tag##*/}
+base=https://raw.githubusercontent.com/gabrielmfern/forbear/${FORBEAR_REF:-$tag}
+release=https://github.com/gabrielmfern/forbear/releases/download/$tag
 os=$(uname -s | sed 's/Darwin/darwin/; s/Linux/linux/')
 if [ "$language" = jai ]; then main=main.jai; forbear=modules/forbear; else main=main.c; forbear=forbear; fi
 
