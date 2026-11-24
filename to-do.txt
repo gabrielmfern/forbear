@@ -1,5 +1,6 @@
 - Text input hooks and components
 - Text selection hook and component
+- Children clipping
 - Scroll bar component
 - Handle nested scrolling containers
 - Primitives that allow handling focus
