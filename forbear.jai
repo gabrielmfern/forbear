@@ -4661,9 +4661,13 @@ set_node_glyphs :: (node: *Node, content: string) {
         }
     }
     font_units_to_point := get_font_units_to_pixel(node.style.font, node.style.font_size);
-    node.size            = Vector2.{node.shaping_run.max_size.x, node.shaping_run.min_size.y} * font_units_to_point;
-    node.min_size        = node.shaping_run.min_size * font_units_to_point;
-    node.max_size        = node.shaping_run.max_size * font_units_to_point;
+    if node.style.width.kind == .FIT {
+        node.size.x = node.shaping_run.max_size.x * font_units_to_point;
+    } else if node.style.height.kind == .FIT {
+        node.size.y = node.shaping_run.max_size.y * font_units_to_point;
+    }
+    node.min_size = node.shaping_run.min_size * font_units_to_point;
+    node.max_size = node.shaping_run.max_size * font_units_to_point;
 
     if node.parent != -1 {
         parent := context.forbear.node_trees[context.forbear.frame % 2][node.parent];
