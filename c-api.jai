@@ -384,7 +384,7 @@ Math :: #import "Math";
         #program_export
         fb_create_javascript_adapter :: (source: string, source_name: *u8) -> *Javascript_Adapter #c_call {
             push_context frame_context {
-                adapter := New(Javascript_Adapter,, context.forbear.persistent_allocator);
+                adapter := New(Javascript_Adapter,, context.forbear.parent_allocator);
                 init_adapter(adapter, frame_context.allocator, source, to_string(source_name));
                 return adapter;
             }

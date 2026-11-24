@@ -90,7 +90,7 @@ init_adapter :: (
                                       main_javascript_source.count,
                                       main_javascript_source_name.data,
                                       main_javascript_source_name.count );
-    adapter.openings_stack.allocator = context.forbear.persistent_allocator;
+    adapter.openings_stack.allocator = context.forbear.parent_allocator;
     if adapter.runtime == null {
         log_error("could not initliaze javascript runtime\n");
         exit(-1);

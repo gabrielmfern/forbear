@@ -796,7 +796,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                 // With -1, the count includes the null terminator
                 count := WideCharToMultiByte(CP_UTF8, 0, wide, -1, null, 0, null, null);
                 if count + 1 > backend.clipboard_text_buffer.count {
-                    backend.clipboard_text_buffer.data = realloc(backend.clipboard_text_buffer.data, count, backend.clipboard_text_buffer.count,, context.forbear.persistent_allocator);
+                    backend.clipboard_text_buffer.data = realloc(backend.clipboard_text_buffer.data, count, backend.clipboard_text_buffer.count,, context.forbear.parent_allocator);
                     backend.clipboard_text_buffer.count = count;
                 }
                 WideCharToMultiByte(CP_UTF8, 0, wide, -1, backend.clipboard_text_buffer.data, count, null, null);
@@ -1089,7 +1089,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                         backend.clipboard_text_buffer.data,
                         utf8.count,
                         backend.clipboard_text_buffer.count,,
-                        context.forbear.persistent_allocator
+                        context.forbear.parent_allocator
                     );
                     backend.clipboard_text_buffer.count = utf8.count;
                 }
@@ -2344,7 +2344,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
                                         clipboard_text_buffer.data,
                                         new_count,
                                         clipboard_text_buffer.count,,
-                                        context.forbear.persistent_allocator
+                                        context.forbear.parent_allocator
                                     );
                                     clipboard_text_buffer.count = new_count;
                                 }
@@ -3630,26 +3630,19 @@ Node :: struct {
 
     tree: *Node_Tree;
 };
-Node_Measurement :: struct {
-    size:               Vector2 = VECTOR2_NAN;
-    content_size:       Vector2 = VECTOR2_NAN;
-    position:           Vector2 = VECTOR2_NAN;
-    clipping_rectangle: Vector4 = VECTOR4_NAN;
-    state_offset:       s64;
-    state_size:         s64;
-    pool_slot:          s64     = -1;
-    key:                u64     = U64_MAX;
-}
-get_measurement :: (node_index: s64 = -1, include_scopes := false) -> measurement: Node_Measurement, defined: bool {
+get_previous_node :: (specified_node_index: s64 = -1, include_scopes := false) -> node: Node, defined: bool {
     using context.forbear;
-    measurement_index := ifx node_index == -1 then parent_index else node_index;
-    if !include_scopes && node_index == -1 {
-        measurement_index = get_parent_element_index();
+    node_tree := node_trees[frame % 2];
+    previous_node_tree := node_trees[1 - frame % 2];
+
+    node_index := ifx specified_node_index == -1 then parent_index else specified_node_index;
+    if !include_scopes && specified_node_index == -1 {
+        node_index = get_parent_element_index();
     }
-    if measurement_index != -1 {
-        expected_key := node_tree[measurement_index].key;
-        if measurement_index < measurements.count && measurements[measurement_index].key == expected_key {
-            return measurements[measurement_index], true;
+    if node_index != -1 {
+        expected_key := node_tree[node_index].key;
+        if node_index < previous_node_tree.count && previous_node_tree[node_index].key == expected_key {
+            return previous_node_tree[node_index], true;
         } else {
             // I don't think we should sort these measurements by keys because that would be making the normal case
             // slower in favor of a case that should be rare as I expect things to be.
@@ -3657,15 +3650,15 @@ get_measurement :: (node_index: s64 = -1, include_scopes := false) -> measuremen
             // TO-DO(depessimization): we should store the previous_index in open_element(), then look up based on that here.
             // There, if the indices don't match, we should iterate to find the index
             // TO-DO(optimization): we should store a contiguous array of the keys of the previous frame's node tree's keys
-            for measurement_by_index: measurements {
+            for measurement_by_index: previous_node_tree {
                 if measurement_by_index.key == expected_key {
                     return measurement_by_index, true;
                 }
             }
-            return Node_Measurement.{}, false;
+            return Node.{}, false;
         }
     } else {
-        return Node_Measurement.{}, false;
+        return Node.{}, false;
     }
 }
 node_pool_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s64, old_memory: *void, allocator_data: *void) -> *void {
@@ -3679,12 +3672,12 @@ node_pool_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size
 node_pool :: () -> Allocator {
     using context.forbear;
     assert(parent_index != -1, "node_pool() must be called from inside an element");
-    node      := *node_tree[parent_index];
+    node      := *node_trees[frame % 2][parent_index];
     pool_slot := node.pool_slot;
     if pool_slot == -1 {
-        measurement, defined := get_measurement(include_scopes = true);
+        previous_node, defined := get_previous_node(include_scopes = true);
         if defined {
-            pool_slot = measurement.pool_slot;
+            pool_slot = previous_node.pool_slot;
         }
     }
     if pool_slot == -1 {
@@ -3720,7 +3713,7 @@ state :: (initial_size: s64, initial: *void) -> *void, first_frame: bool {
     using context.forbear;
 
     assert(parent_index != -1, "state() must be called from inside an element");
-    node := *node_tree[parent_index];
+    node := *node_trees[frame % 2][parent_index];
     if node.state_size == 0 {
         node.state_offset = state_used;
     }
@@ -3731,13 +3724,13 @@ state :: (initial_size: s64, initial: *void) -> *void, first_frame: bool {
         exit(-1);
     }
 
-    result := *state_buffers.*[state_current][state_used];
+    result := *state_buffers.*[frame % 2][state_used];
     if initial memcpy(result, initial, initial_size);
     else       memset(result, 0, initial_size);
-    measurement, defined := get_measurement(include_scopes = true);
-    copy_forward         := defined && node.state_size + size <= measurement.state_size;
+    previous_node, defined := get_previous_node(include_scopes = true);
+    copy_forward         := defined && node.state_size + size <= previous_node.state_size;
     if copy_forward {
-        memcpy(result, *state_buffers.*[1 - state_current][measurement.state_offset + node.state_size], initial_size);
+        memcpy(result, *state_buffers.*[1 - frame % 2][previous_node.state_offset + node.state_size], initial_size);
     }
     node.state_size += size;
     state_used      += size;
@@ -3865,15 +3858,15 @@ use_scrolling :: (using state: *Scrolling_State) {
         offset += get_scroll_delta();
     }
     node                 := get_node();
-    measurement, defined := get_measurement();
+    previous_node, defined := get_previous_node();
     limit_x := FLOAT32_NAN;
     limit_y := FLOAT32_NAN;
     if scheduled_scroll.defined && scheduled_scroll.defined_this_frame {
         scheduled_scroll.defined_this_frame = false;
     } else if scheduled_scroll.defined && defined {
         visible := Vector2.{
-            measurement.size.x - node.style.padding.x.x - node.style.padding.x.y,
-            measurement.size.y - node.style.padding.y.x - node.style.padding.y.y,
+            previous_node.size.x - node.style.padding.x.x - node.style.padding.x.y,
+            previous_node.size.y - node.style.padding.y.x - node.style.padding.y.y,
         };
         position := scheduled_scroll.position;
         if position.x < offset.x                  then offset.x = position.x;
@@ -3884,12 +3877,12 @@ use_scrolling :: (using state: *Scrolling_State) {
         scheduled_scroll.defined = false;
     }
     if defined {
-        limit_x = max(  measurement.content_size.x
-                       - measurement.size.x
+        limit_x = max(  previous_node.content_size.x
+                       - previous_node.size.x
                        + node.style.padding.x.x
                        + node.style.padding.x.y, 0.0);
-        limit_y = max(  measurement.content_size.y
-                       - measurement.size.y
+        limit_y = max(  previous_node.content_size.y
+                       - previous_node.size.y
                        + node.style.padding.y.x
                        + node.style.padding.y.y, 0.0);
         offset = Vector2.{
@@ -3914,14 +3907,14 @@ use_scrolling :: (using state: *Scrolling_State) {
 // Beware that this pointer might be come invalid if you define one more element
 get_node :: (node_index: s64) -> *Node {
     using context.forbear;
-    return *node_tree[node_index];
+    return *node_trees[frame % 2][node_index];
 }
 // Beware that this pointer might be come invalid if you define one more element
 get_node :: () -> *Node {
     using context.forbear;
     parent_element_index := get_parent_element_index();
     if parent_element_index != -1 {
-        return *node_tree[parent_element_index];
+        return *node_trees[frame % 2][parent_element_index];
     } else {
         return null;
     }
@@ -4174,9 +4167,9 @@ get_mouse_position :: () -> Vector2 {
 }
 is_mouse_inside :: () -> bool {
     using context.forbear;
-    measurement, defined := get_measurement();
+    previous_node, defined := get_previous_node();
     position             := get_mouse_position();
-    return defined && window.mouse_state.inside && is_point_inside(position, measurement);
+    return defined && window.mouse_state.inside && is_point_inside(position, previous_node);
 }
 is_mouse_held :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
@@ -4191,24 +4184,24 @@ on_mouse_down :: (button := Mouse_Button.LEFT, check_inside := true) -> bool {
 on_mouse_up :: (button := Mouse_Button.LEFT, check_inside := true) -> bool {
     return context.forbear.window.mouse_state.released[button] && (!check_inside || is_mouse_inside());
 }
-is_point_inside :: (point: Vector2, measurement: Node_Measurement) -> bool {
-    return point.x >= measurement.position.x
-        && point.y >= measurement.position.y
-        && point.x <= measurement.position.x + measurement.size.x
-        && point.y <= measurement.position.y + measurement.size.y;
+is_point_inside :: (point: Vector2, node: Node) -> bool {
+    return point.x >= node.position.x
+        && point.y >= node.position.y
+        && point.x <= node.position.x + node.size.x
+        && point.y <= node.position.y + node.size.y;
 }
 get_press_position :: (button := Mouse_Button.LEFT) -> Vector2 {
     return context.forbear.window.mouse_state.press_position[button];
 }
 is_dragging :: (button := Mouse_Button.LEFT) -> bool {
     using context.forbear;
-    measurement, defined := get_measurement();
+    previous_node, defined := get_previous_node();
     if defined {
         press_position := window.mouse_state.press_position[button];
         mouse          := get_mouse_position();
         delta          := mouse - press_position;
         moved          := delta.x*delta.x + delta.y*delta.y > 4*4;
-        return window.mouse_state.held[button] && is_point_inside(press_position, measurement) && moved;
+        return window.mouse_state.held[button] && is_point_inside(press_position, previous_node) && moved;
     } else {
         return false;
     }
@@ -4216,13 +4209,13 @@ is_dragging :: (button := Mouse_Button.LEFT) -> bool {
 on_click :: (button := Mouse_Button.LEFT, check_inside := true, movement_threshold := false) -> bool {
     using context.forbear;
     if on_mouse_up(button, check_inside) {
-        measurement, defined := get_measurement();
+        previous_node, defined := get_previous_node();
         assert(defined, "the measurement should exist if is_mouse_inside is true");
         mouse          := get_mouse_position();
         press_position := window.mouse_state.press_position[button];
         delta          := mouse - press_position;
         moved          := delta.x*delta.x + delta.y*delta.y > 4*4;
-        return is_point_inside(press_position, measurement) && (!movement_threshold || !moved);
+        return is_point_inside(press_position, previous_node) && (!movement_threshold || !moved);
     } else {
         return false;
     }
@@ -4268,7 +4261,7 @@ copy_to_clipboard :: (text: string) {
                 backend.clipboard_text_buffer.data,
                 text.count,
                 backend.clipboard_text_buffer.count,,
-                persistent_allocator
+                parent_allocator
             );
             backend.clipboard_text_buffer.count = text.count;
         }
@@ -4283,7 +4276,7 @@ copy_to_clipboard :: (text: string) {
                     backend.clipboard_text_buffer.data,
                     text.count,
                     backend.clipboard_text_buffer.count,,
-                    persistent_allocator
+                    parent_allocator
                 );
                 backend.clipboard_text_buffer.count = text.count;
             }
@@ -4480,22 +4473,23 @@ Node_Opening_Data :: struct {
     node_index: s64;
 };
 // Since components/hooks/scopes (all the same thing) are actually nodes, this function is used so that element
-// creation, get_node and get_measurement calls are all properly using the closest parent that's an element instead
-// of the direct parent which might be a scope.
+// creation, get_node and get_previous_node calls are all properly using the closest parent that's an element instead of
+// the direct parent which might be a scope.
 //
-// TO-DO: This is a terrible trade-off of using a single fat struct for both scopes and elements.
+// TO-DO: This is a terrible trade-off for using a single fat struct for both scopes and elements.
 get_parent_element_index :: () -> s64 {
-    element_ancestor_index := context.forbear.parent_index;
-    previous_parent_index := context.forbear.parent_index;
-    while element_ancestor_index != -1 && context.forbear.node_tree[element_ancestor_index].kind == .SCOPE {
-        element_ancestor_index = context.forbear.node_tree[element_ancestor_index].parent;
+    using context.forbear;
+    element_ancestor_index := parent_index;
+    previous_parent_index := parent_index;
+    while element_ancestor_index != -1 && node_trees[frame % 2][element_ancestor_index].kind == .SCOPE {
+        element_ancestor_index = node_trees[frame % 2][element_ancestor_index].parent;
     }
     return element_ancestor_index;
 }
-// Overload of open_element that automatically computes the key_hash from a manual key, the
-// scope_key and the caller_location.
+// Overload of open_element that automatically computes the key_hash from a manual key, the scope_key and the
+// caller_location.
 //
-// Internal API, in Jai use the `element` macro.
+// Internal API, use the `element` macro.
 open_element :: (style: Style, key := "", location := #caller_location) -> Node_Opening_Data {
     key_hash: u64;
     if key.count > 0 {
@@ -4508,19 +4502,21 @@ open_element :: (style: Style, key := "", location := #caller_location) -> Node_
     }
     return open_element(style, key_hash);
 }
-// Intermediary API that's used from adapters, such as the JavaScript one. When in jai, use `element`
+// Intermediary API that's used from adapters, such as the JavaScript one. When in jai, use `element`.
 open_element :: (style: Style, key_hash: u64) -> Node_Opening_Data {
     previous_parent_index := context.forbear.parent_index;
     parent_index := get_parent_element_index();
 
-    node, index := append_to_node_tree(*context.forbear.node_tree, parent_index);
+    node_tree := *context.forbear.node_trees[context.forbear.frame % 2];
+
+    node, index := append_to_node_tree(node_tree, parent_index);
     previous_base_style := context.forbear.base_style;
     complete_with(style, context.forbear.base_style, *node.style);
     context.forbear.base_style = from(node.style);
     if style.z_index < U16_MAX {
         node.z = style.z_index;
     } else if parent_index != -1 {
-        node.z = context.forbear.node_tree[parent_index].z;
+        node.z = node_tree.*[parent_index].z;
     }
     node.key = key_hash;
     if node.style.width.kind == {
@@ -4587,13 +4583,13 @@ open_element :: (style: Style, key_hash: u64) -> Node_Opening_Data {
     };
 }
 close_element :: (using data: Node_Opening_Data) {
-    node := *context.forbear.node_tree[node_index];
+    node := *context.forbear.node_trees[context.forbear.frame % 2][node_index];
     node.size.x = clamp(node.size.x, node.min_size.x, node.max_size.x);
     node.size.y = clamp(node.size.y, node.min_size.y, node.max_size.y);
 
-    measurement, defined := get_measurement();
+    previous_node, defined := get_previous_node();
     assert(
-        !defined || node.state_size == measurement.state_size,
+        !defined || node.state_size == previous_node.state_size,
         "element called state() a different number of times than last frame"
     );
 
@@ -4625,17 +4621,18 @@ element :: (style: Style, body: Code, location := #caller_location) -> s64 #expa
 // This is used by intermediary APIs, such as an adapter or the C ABI.
 open_scope :: (key_hash: u64) -> Node_Opening_Data {
     parent_index          := context.forbear.parent_index;
-    index                 := context.forbear.node_tree.count;
+    node_tree             := *context.forbear.node_trees[context.forbear.frame % 2];
+    index                 := node_tree.count;
     previous_parent_index := parent_index;
     previous_scope_key    := context.forbear.scope_key;
     {
         node := Node.{
             parent = parent_index,
-            tree   = *context.forbear.node_tree,
+            tree   = node_tree,
         };
         node.kind = .SCOPE;
         node.key  = key_hash;
-        array_add(*context.forbear.node_tree, node);
+        array_add(node_tree, node);
         context.forbear.parent_index = index;
         context.forbear.scope_key    = key_hash;
     }
@@ -4669,7 +4666,7 @@ set_node_glyphs :: (node: *Node, content: string) {
     node.max_size        = node.shaping_run.max_size * font_units_to_point;
 
     if node.parent != -1 {
-        parent := context.forbear.node_tree[node.parent];
+        parent := context.forbear.node_trees[context.forbear.frame % 2][node.parent];
         if parent.style.cursor == .DEFAULT {
             node.style.cursor = .TEXT;
         }
@@ -4680,7 +4677,7 @@ set_node_glyphs :: (node: *Node, content: string) {
 // API used for by the C-ABI and adapters.
 text :: (style: Style, content: string, key_hash: u64) -> s64 #expand {
     data := open_element(style, key_hash);
-    set_node_glyphs(*context.forbear.node_tree[data.node_index], content);
+    set_node_glyphs(*context.forbear.node_trees[context.forbear.frame % 2][data.node_index], content);
     close_element(data);
     return data.node_index;
 }
@@ -4688,7 +4685,7 @@ text :: (style: Style, content: string, key_hash: u64) -> s64 #expand {
 text :: (style: Style, format: string, args: ..Any, key := "", location := #caller_location) -> s64 #expand {
     data    := open_element(style, key, location);
     content := ifx args.count then sprint(format, ..args) else format;
-    set_node_glyphs(*context.forbear.node_tree[data.node_index], content);
+    set_node_glyphs(*context.forbear.node_trees[context.forbear.frame % 2][data.node_index], content);
     close_element(data);
     return data.node_index;
 }
@@ -4708,9 +4705,9 @@ open_scope :: (key := "", location := #caller_location) -> Node_Opening_Data {
     return open_scope(key_hash);
 }
 close_scope :: (using opening_data: Node_Opening_Data, value: $T) -> T {
-    measurement, defined := get_measurement(include_scopes = true);
+    previous_node, defined := get_previous_node(include_scopes = true);
     assert(
-        !defined || context.forbear.node_tree[node_index].state_size == measurement.state_size,
+        !defined || context.forbear.node_trees[context.forbear.frame % 2][node_index].state_size == previous_node.state_size,
         "scope called state() a different number of times than last frame"
     );
 
@@ -4917,7 +4914,7 @@ glyph_atlas_fill :: () -> bool {
         glyph_atlas_reset(*glyph_atlas);
         glyph_atlas.scale = window.scale;
     }
-    for node: node_tree if node.kind == .ELEMENT && node.shaping_run.glyphs.count != 0 {
+    for node: node_trees[frame % 2] if node.kind == .ELEMENT && node.shaping_run.glyphs.count != 0 {
         scale := cast(float) window.scale;
         rounded_font_size := round_font_size(node.style.font_size * scale);
         font_units_to_point := get_font_units_to_pixel(node.style.font, node.style.font_size);
@@ -5009,7 +5006,7 @@ Shaping_Cache :: struct {
 shaping_cache_init :: (using shaping_cache: *Shaping_Cache) {
     allocator.proc  = flat_pool_allocator_proc;
     allocator.data  = *pool;
-    table.allocator = context.forbear.persistent_allocator;
+    table.allocator = context.forbear.parent_allocator;
 }
 shaping_cache_copy_over :: (using shaping_cache: *Shaping_Cache, key: Shaping_Key, run: *Shaping_Run) -> *Shaping_Run {
     push_allocator(allocator);
@@ -5153,12 +5150,30 @@ shape_text :: (style: Complete_Style, text: string) -> Shaping_Run {
     return shaping_run;
 }
 
+Frame_Arena :: struct {
+    allocator: Allocator;
+    // two pools, one for each frame that we swap between so that we can keep last frame's node tree and everything
+    // allocated
+    pools:     [2]Flat_Pool;
+    current:   s64;
+};
+frame_arena_allocator_proc :: (mode: Allocator_Mode, requested_size: s64, old_size: s64, old_memory: *void, allocator_data: *void) -> *void {
+    frame_arena := cast(*Frame_Arena) allocator_data;
+    return flat_pool_allocator_proc(mode, requested_size, old_size, old_memory, *frame_arena.pools[frame_arena.current]);
+}
+push_frame_allocator :: () #expand {
+    old_allocator    := context.allocator;
+    context.allocator = context.forbear.frame_arena.allocator;
+    `defer context.allocator = old_allocator;
+}
+
 static_state_buffers: [2][16 * 1024 * 1024]u8 #align 16;
 static_pool_slots:    [256]Pool_Slot;
 Forbear :: struct {
-    persistent_allocator: Allocator;
-    node_tree:            Node_Tree;
-    measurements:         [..]Node_Measurement;
+    parent_allocator: Allocator;
+    frame_arena:      *Frame_Arena;
+
+    node_trees: [2]Node_Tree;
 
     frame:           s64;
     delta_time:      float;
@@ -5171,7 +5186,6 @@ Forbear :: struct {
     state_buffers := *static_state_buffers; // taking a pointer here makes this thread-safe, but
                                             // also lets us keep it in static memory
     pool_slots    := *static_pool_slots;
-    state_current: s64;
     state_used:    s64;
 
     font_counter:          u16;
@@ -5194,6 +5208,7 @@ Forbear :: struct {
 // The glyph atlas's table, the node tree, the measurements and the shaping cache are all allocated in the persistent
 // allocator and are never freed. They last the entire lifetime of the program and never shrink either.
 init_forbear :: (forbear:            *Forbear,
+                 program_frame_arena: *Frame_Arena,
                  // TO-DO: currently we're defining the specific backend names to be just one here, but in the long-term we will include
                  // multiple backends for each operating system, not one, so we need to handle that in a better way.
                  program_backend:    *Backend,
@@ -5203,10 +5218,11 @@ init_forbear :: (forbear:            *Forbear,
     context.forbear = forbear;
 
     window                      = program_window;
-    persistent_allocator        = context.allocator;
-    glyph_atlas.table.allocator = persistent_allocator;
-    node_tree.allocator         = persistent_allocator;
-    measurements.allocator      = persistent_allocator;
+    parent_allocator            = context.allocator;
+    glyph_atlas.table.allocator = parent_allocator;
+    frame_arena                 = program_frame_arena;
+    frame_arena.allocator.proc  = frame_arena_allocator_proc;
+    frame_arena.allocator.data  = frame_arena;
     shaping_cache_init(*shaping_caches[0]);
     shaping_cache_init(*shaping_caches[1]);
 
@@ -5421,6 +5437,7 @@ GLSL);
 // - https://www.youtube.com/watch?v=by9lQvpvMIc
 layout :: () {
     using context.forbear;
+    node_tree := node_trees[frame % 2];
     if node_tree.count > 0 {
         fit_child :: (node: *Node, child: *Node, fit_direction: Direction) {
             preferred_size := get_preferred_size(node, fit_direction);
@@ -6168,6 +6185,7 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
 
     z_buckets: [..]u32;
     instance_count: s64;
+    node_tree := node_trees[frame % 2];
     array_reserve(*z_buckets, node_tree.count);
     for node: node_tree if node.kind == .ELEMENT {
         if node.z >= z_buckets.count {
@@ -6293,34 +6311,18 @@ prepare_for_next_frame :: () {
     memset(*window.mouse_state.pressed, 0, size_of(type_of(window.mouse_state.pressed)));
 
     cursor := Cursor.DEFAULT;
-    array_resize(*measurements, node_tree.count, false);
-    for node: node_tree {
-        // We can't just copy the entire Node_Tree with a `mempcy` here because it points into frame allocated data
-        // that was allocated in the frame pool. Besides, in what I was able to measure, this copy tends to be more
-        // performant than if we were to copy the entire Node_Tree with `memcpy`.
-        measurements[it_index] = Node_Measurement.{
-            size               = node.size,
-            content_size       = node.content_size,
-            position           = node.position,
-            clipping_rectangle = node.clipping_rectangle,
-            state_offset       = node.state_offset,
-            state_size         = node.state_size,
-            pool_slot          = node.pool_slot,
-            key                = node.key,
-        };
-        if window.mouse_state.inside {
-            mouse := window.mouse_state.position;
-            top_z := 0;
-            for node: node_tree if node.kind == .ELEMENT {
-                inside :=
-                       mouse.x >= node.position.x
-                    && mouse.x <= node.position.x + node.size.x
-                    && mouse.y >= node.position.y
-                    && mouse.y <= node.position.y + node.size.y;
-                if inside && node.z >= top_z {
-                    top_z  = node.z;
-                    cursor = node.style.cursor;
-                }
+    if window.mouse_state.inside {
+        mouse := window.mouse_state.position;
+        top_z := 0;
+        for node: node_trees[frame % 2] if node.kind == .ELEMENT {
+            inside :=
+                   mouse.x >= node.position.x
+                && mouse.x <= node.position.x + node.size.x
+                && mouse.y >= node.position.y
+                && mouse.y <= node.position.y + node.size.y;
+            if inside && node.z >= top_z {
+                top_z  = node.z;
+                cursor = node.style.cursor;
             }
         }
     }
@@ -6337,9 +6339,7 @@ prepare_for_next_frame :: () {
             }
         }
     }
-    state_current = 1 - state_current;
     state_used    = 0;
-    array_reset_keeping_memory(*node_tree);
 
     current_shaping_cache_pool := *shaping_caches[shaping_cache_current].pool;
     if current_shaping_cache_pool.current_point - current_shaping_cache_pool.memory_base > Shaping_Cache.BUDGET {
@@ -6364,6 +6364,15 @@ prepare_for_next_frame :: () {
             slot.used = false;
         }
     }
+
+
+    frame_arena.current = 1 - frame_arena.current;
+    reset(*frame_arena.pools[frame_arena.current]);
+    reset_temporary_storage();
+   
+    // this was the previous node tree, but they're going to be swapped now
+    node_trees[1 - frame % 2] = Node_Tree.{};
+    array_reserve(*node_trees[1 - frame % 2], node_trees[frame % 2].count);
 
     frame += 1;
 }
