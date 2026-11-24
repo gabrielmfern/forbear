@@ -4997,31 +4997,7 @@ shaping_key_equals :: (a: Shaping_Key, b: Shaping_Key) -> bool {
         && a.line_height.percentage == b.line_height.percentage
         && a.text                   == b.text;
 }
-Shaping_Cache :: struct {
-    BUDGET :: 4 * 1024 * 1024;
-    table:     Table(Shaping_Key, Shaping_Run, shaping_key_hash, shaping_key_equals);
-    allocator: Allocator;
-    pool:      Flat_Pool;
-};
-shaping_cache_init :: (using shaping_cache: *Shaping_Cache) {
-    allocator.proc  = flat_pool_allocator_proc;
-    allocator.data  = *pool;
-    table.allocator = context.forbear.parent_allocator;
-}
-shaping_cache_copy_over :: (using shaping_cache: *Shaping_Cache, key: Shaping_Key, run: *Shaping_Run) -> *Shaping_Run {
-    push_allocator(allocator);
-    glyphs:            [..]Glyph;
-    pre_break_indices: [..]s64;
-    array_copy(*glyphs, run.glyphs);
-    array_copy(*pre_break_indices, run.pre_break_indices);
-    owned_run                  := run.*;
-    owned_run.text              = copy_string(run.text);
-    owned_run.glyphs            = glyphs;
-    owned_run.pre_break_indices = pre_break_indices;
-    owned_key                  := key;
-    owned_key.text              = owned_run.text;
-    return table_add(*table, owned_key, owned_run);
-}
+Shaping_Table :: Table(Shaping_Key, Shaping_Run, shaping_key_hash, shaping_key_equals);
 shape_text :: (style: Complete_Style, text: string) -> Shaping_Run {
     using context.forbear;
     font := style.font;
@@ -5046,19 +5022,29 @@ shape_text :: (style: Complete_Style, text: string) -> Shaping_Run {
     key.hash = fnv1a_hash(cast(u64) (cast(*u32) *key.line_height.percentage).*, key.hash);
     key.hash = fnv1a_hash(text.data, text.count, key.hash);
 
-    shaping_cache := *shaping_caches[shaping_cache_current];
-    cached_run    := table_find_pointer(*shaping_cache.table, key);
+    shaping_table := *shaping_tables[frame % 2];
+    cached_run    := table_find_pointer(shaping_table, key);
     if cached_run  return cached_run.*;
-    cached_run = table_find_pointer(*shaping_caches[1 - shaping_cache_current].table, key);
-    if cached_run  return shaping_cache_copy_over(shaping_cache, key, cached_run).*;
+    cached_run = table_find_pointer(*shaping_tables[1 - frame % 2], key);
+    if cached_run {
+        glyphs:            [..]Glyph;
+        pre_break_indices: [..]s64;
+        array_copy(*glyphs, cached_run.glyphs);
+        array_copy(*pre_break_indices, cached_run.pre_break_indices);
+        owned_run                  := cached_run.*;
+        owned_run.text              = copy_string(cached_run.text);
+        owned_run.glyphs            = glyphs;
+        owned_run.pre_break_indices = pre_break_indices;
+        key.text                    = owned_run.text;
+        table_add(shaping_table, key, owned_run);
+        return owned_run;
+    }
 
     set_weight(font, style.font_weight);
     font_line_height                       := cast(float) font.raster_face.height;
     text_wrapping                          := style.text_wrapping;
     shaping_run                            : Shaping_Run;
-    shaping_run.text                        = copy_string(text,, shaping_cache.allocator);
-    shaping_run.glyphs.allocator            = shaping_cache.allocator;
-    shaping_run.pre_break_indices.allocator = shaping_cache.allocator;
+    shaping_run.text                        = copy_string(text);
     if #complete key.line_height.kind == {
         case .PERCENTAGE;
             shaping_run.line_height = font_line_height * key.line_height.percentage;
@@ -5146,7 +5132,7 @@ shape_text :: (style: Complete_Style, text: string) -> Shaping_Run {
     shaping_run.max_size.y = max(shaping_run.min_size.y, shaping_run.max_size.y);
 
     key.text = shaping_run.text;
-    table_add(*shaping_cache.table, key, shaping_run);
+    table_add(shaping_table, key, shaping_run);
     return shaping_run;
 }
 
@@ -5190,8 +5176,7 @@ Forbear :: struct {
 
     font_counter:          u16;
     freetype_library:      FT_Library;
-    shaping_caches:        [2]Shaping_Cache;
-    shaping_cache_current: s64;
+    shaping_tables:        [2]Shaping_Table;
     shaping_context:       *kbts_shape_context;
 
     shader_program: u32;
@@ -5223,8 +5208,6 @@ init_forbear :: (forbear:            *Forbear,
     frame_arena                 = program_frame_arena;
     frame_arena.allocator.proc  = frame_arena_allocator_proc;
     frame_arena.allocator.data  = frame_arena;
-    shaping_cache_init(*shaping_caches[0]);
-    shaping_cache_init(*shaping_caches[1]);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -6341,15 +6324,6 @@ prepare_for_next_frame :: () {
     }
     state_used    = 0;
 
-    current_shaping_cache_pool := *shaping_caches[shaping_cache_current].pool;
-    if current_shaping_cache_pool.current_point - current_shaping_cache_pool.memory_base > Shaping_Cache.BUDGET {
-        // This switching between the two pools means we're going to start trying to clean up the shaping cache by
-        // simply trying to copy over from the previous arena.
-        shaping_cache_current = 1 - shaping_cache_current;
-        table_reset_keeping_memory(*shaping_caches[shaping_cache_current].table);
-        reset(*shaping_caches[shaping_cache_current].pool);
-    }
-
     for *slot: pool_slots.* {
         if slot.pool.memory_base == null  break;
         if slot.used && slot.last_frame != frame {
@@ -6373,6 +6347,10 @@ prepare_for_next_frame :: () {
     // this was the previous node tree, but they're going to be swapped now
     node_trees[1 - frame % 2] = Node_Tree.{};
     array_reserve(*node_trees[1 - frame % 2], node_trees[frame % 2].count);
+    shaping_tables[1 - frame % 2] = Shaping_Table.{};
+    if shaping_tables[frame % 2].count > 0 {
+        table_ensure_space(*shaping_tables[1 - frame % 2], shaping_tables[frame % 2].count);
+    }
 
     frame += 1;
 }

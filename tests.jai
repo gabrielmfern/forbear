@@ -301,22 +301,14 @@ main :: () {
         CACHED :: "cached across frames";
         expected_glyphs : [..]s32;
         expected_glyphs.allocator = context.allocator;
-        over_budget     := alloc_string(Shaping_Cache.BUDGET / size_of(Glyph) + 1);
-        memset(over_budget.data, #char "a", over_budget.count);
-        first_cache: s64;
         test("shaping text for the first time", #code {
-            first_cache = context.forbear.shaping_cache_current;
-            index      := text(CACHED);
+            index := text(CACHED);
             for context.forbear.node_trees[context.forbear.frame % 2][index].shaping_run.glyphs  array_add(*expected_glyphs, it.index);
-            text(over_budget);
         });
-        test("carrying a run over from the previous cache", #code {
-            assert(context.forbear.shaping_cache_current != first_cache, "expected going over budget to swap caches");
+        test("carrying a run over from the previous frame", #code {
             text(CACHED);
-            text(over_budget);
         });
         test("a run carried over twice survives new text shaped into the reused pool", #code {
-            assert(context.forbear.shaping_cache_current == first_cache, "expected the first cache to be reused");
             for 0..20  text("different text number % to fill the pool", it);
             index  := text(CACHED);
             glyphs := context.forbear.node_trees[context.forbear.frame % 2][index].shaping_run.glyphs;
