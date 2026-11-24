@@ -4837,10 +4837,9 @@ font_raster_glyph :: (font: *Font, glyph_index: u16, subpixel_bin: s32) -> Raste
     return raster_glyph;
 }
 Glyph_Atlas_Entry :: struct {
-    bearing: Vector2;
-    size:    Vector2;
-    uv_min:  Vector2;
-    uv_max:  Vector2;
+    bearing:    Vector2;
+    size:       Vector2;
+    texel_rect: [4]u16;
 };
 Glyph_Atlas :: struct {
     texture: u32;
@@ -4942,16 +4941,9 @@ glyph_atlas_fill :: () -> bool {
             }
 
             new_entry: Glyph_Atlas_Entry;
-            new_entry.bearing = .{ xx raster.left, xx -raster.top };
-            new_entry.size    = .{ xx raster.width, xx raster.height };
-            new_entry.uv_min  = .{
-                x = x / (cast(float) glyph_atlas.size),
-                y = y / (cast(float) glyph_atlas.size)
-            };
-            new_entry.uv_max  = .{
-                x = ((cast(float)x) + (cast(float)raster.width)) / (cast(float) glyph_atlas.size),
-                y = ((cast(float)y) + (cast(float)raster.height)) / (cast(float) glyph_atlas.size)
-            };
+            new_entry.bearing    = .{ xx raster.left, xx -raster.top };
+            new_entry.size       = .{ xx raster.width, xx raster.height };
+            new_entry.texel_rect = .[xx x, xx y, xx (x + cast(s32) raster.width), xx (y + cast(s32) raster.height)];
             table_add(*glyph_atlas.table, atlas_key, new_entry);
         }
     }
@@ -5177,7 +5169,7 @@ Forbear :: struct {
     base_style:   Base_Style;
 
     state_buffers := *static_state_buffers; // taking a pointer here makes this thread-safe, but
-    // also lets us keep it in static memory
+                                            // also lets us keep it in static memory
     pool_slots    := *static_pool_slots;
     state_current: s64;
     state_used:    s64;
@@ -5242,38 +5234,33 @@ init_forbear :: (forbear:            *Forbear,
 
     // `color`
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 16);
+    glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, stride, cast(*void) 16);
     glVertexAttribDivisor(2, 1);
 
-    // `border_width`
+    // `kind`
     glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 32);
+    glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT, stride, cast(*void) 20);
     glVertexAttribDivisor(3, 1);
 
     // `border_color`
     glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 48);
+    glVertexAttribPointer(4, 4, GL_UNSIGNED_BYTE, GL_TRUE, stride, cast(*void) 40);
     glVertexAttribDivisor(4, 1);
 
     // `border_radius`
     glEnableVertexAttribArray(5);
-    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, stride, cast(*void) 64);
+    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, stride, cast(*void) 44);
     glVertexAttribDivisor(5, 1);
 
-    // `uv_min`
+    // `border_width`
     glEnableVertexAttribArray(6);
-    glVertexAttribPointer(6, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 68);
+    glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, stride, cast(*void) 24);
     glVertexAttribDivisor(6, 1);
 
-    // `uv_max`
+    // `texel_rect`
     glEnableVertexAttribArray(7);
-    glVertexAttribPointer(7, 2, GL_FLOAT, GL_FALSE, stride, cast(*void) 76);
+    glVertexAttribIPointer(7, 4, GL_UNSIGNED_SHORT, stride, cast(*void) 24);
     glVertexAttribDivisor(7, 1);
-
-    // `kind`
-    glEnableVertexAttribArray(8);
-    glVertexAttribIPointer(8, 1, GL_UNSIGNED_INT, stride, cast(*void) 84);
-    glVertexAttribDivisor(8, 1);
 
     //
     // === node shaders ===
@@ -5283,14 +5270,14 @@ init_forbear :: (forbear:            *Forbear,
         layout(location = 0) in vec2 position;
         layout(location = 1) in vec2 size;
         layout(location = 2) in vec4 color;
-        layout(location = 3) in vec4 border_width;
+        layout(location = 3) in uint kind;
         layout(location = 4) in vec4 border_color;
         layout(location = 5) in float border_radius;
-        layout(location = 6) in vec2 uv_min;
-        layout(location = 7) in vec2 uv_max;
-        layout(location = 8) in uint kind;
+        layout(location = 6) in vec4 border_width;
+        layout(location = 7) in uvec4 texel_rect;
 
         uniform vec2 viewport;
+        uniform sampler2D atlas;
 
         out vec2 v_position;
         out vec2 v_size;
@@ -5314,7 +5301,7 @@ init_forbear :: (forbear:            *Forbear,
             v_border_width = border_width;
             v_border_color = vec4(border_color.rgb * border_color.a, border_color.a);
             v_border_radius = border_radius;
-            v_uv = mix(uv_min, uv_max, corner);
+            v_uv = mix(vec2(texel_rect.xy), vec2(texel_rect.zw), corner) / vec2(textureSize(atlas, 0));
             v_kind = kind;
 
             gl_Position = vec4((position.xy + corner * size.xy) / viewport * 2.0 - 1.0, 0.0, 1.0);
@@ -6131,21 +6118,26 @@ Draw_Instance :: struct {
     };
 
     position: Vector2;
-    size: Vector2;
-    color: Vector4;
+    size:     Vector2;
+    color:    u32;
+    kind:     Draw_Instance_Kind;
 
     // Node
-    border_width: Vector4;
-    border_color: Vector4;
+    border_width:  Vector4;
+    border_color:  u32;
     border_radius: float;
 
     // Glyph
-    uv_min:  Vector2;
-    uv_max:  Vector2;
-
-    kind: Draw_Instance_Kind;
-    z: u16;
+    #overlay (border_width) texel_rect: [4]u16;
 };
+#assert size_of(Draw_Instance) == 48;
+rgba8 :: (color: Vector4) -> u32 {
+    r := cast(u32) (clamp(color.x, 0.0, 1.0) * 255.0 + 0.5);
+    g := cast(u32) (clamp(color.y, 0.0, 1.0) * 255.0 + 0.5);
+    b := cast(u32) (clamp(color.z, 0.0, 1.0) * 255.0 + 0.5);
+    a := cast(u32) (clamp(color.w, 0.0, 1.0) * 255.0 + 0.5);
+    return r | (g << 8) | (b << 16) | (a << 24);
+}
 draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
     using context.forbear;
     #if OS == .MACOS {
@@ -6199,12 +6191,11 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
         {
             using instance;
             kind = .NODE;
-            z = node.z;
             position = node.position;
             size = node.size;
             // TO-DO: write out the instance gathering for the other types of backgrounds
             if node.style.background.kind == .COLOR {
-                color = node.style.background.color;
+                color = rgba8(node.style.background.color);
             }
             border_width = Vector4.{
                 node.style.border_width.x.x, // Left
@@ -6212,11 +6203,11 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
                 node.style.border_width.y.x, // Top
                 node.style.border_width.y.y  // Bottom
             };
-            border_color = node.style.border_color;
+            border_color = rgba8(node.style.border_color);
             border_radius = min(node.style.border_radius, min(node.size.x, node.size.y));
         }
-        draw_instances[z_buckets[instance.z]] = instance;
-        z_buckets[instance.z] += 1;
+        draw_instances[z_buckets[node.z]] = instance;
+        z_buckets[node.z] += 1;
 
         if node.shaping_run.glyphs.count != 0 {
             scale := cast(float) window.scale;
@@ -6231,7 +6222,6 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
 
                 instance: Draw_Instance;
                 instance.kind = .GLYPH;
-                instance.z = node.z;
                 // The entry is only missing if the atlas is full at its maximum size, the instance was already
                 // counted in the z buckets though, so it's left with no size
                 if entry != null {
@@ -6240,13 +6230,11 @@ draw :: (clearing_color := Vector4.{1.0, 1.0, 1.0, 1.0}) {
                     position.x = (pixel_x + entry.bearing.x) / scale;
                     position.y = (floor(baseline_y * scale + 0.5) + entry.bearing.y) / scale;
                     size = entry.size / scale;
-                    color = node.style.color;
-
-                    uv_min = entry.uv_min;
-                    uv_max = entry.uv_max;
+                    color = rgba8(node.style.color);
+                    texel_rect = entry.texel_rect;
                 }
-                draw_instances[z_buckets[instance.z]] = instance;
-                z_buckets[instance.z] += 1;
+                draw_instances[z_buckets[node.z]] = instance;
+                z_buckets[node.z] += 1;
             }
         }
     }
