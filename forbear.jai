@@ -5282,7 +5282,7 @@ init_forbear :: (forbear:            *Forbear,
         uniform vec2 viewport;
         uniform sampler2D atlas;
 
-        out vec2 v_position;
+        centroid out vec2 v_position;
         out vec2 v_size;
         out vec4 v_color;
         out vec4 v_border_width;
@@ -5315,7 +5315,7 @@ GLSL);
     fragment_shader := compile_shader(GL_FRAGMENT_SHADER, #string GLSL
         #version 330 core
 
-        in vec2 v_position;
+        centroid in vec2 v_position;
         in vec2 v_size;
         in vec4 v_color;
         in vec4 v_border_width;
