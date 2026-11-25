@@ -6347,7 +6347,7 @@ prepare_for_next_frame :: () {
     frame_arena.current = 1 - frame_arena.current;
     reset(*frame_arena.pools[frame_arena.current]);
     reset_temporary_storage();
-   
+
     // this was the previous node tree, but they're going to be swapped now
     node_trees[1 - frame % 2] = Node_Tree.{};
     array_reserve(*node_trees[1 - frame % 2], node_trees[frame % 2].count);
@@ -6379,38 +6379,40 @@ get_plugin :: () -> *Metaprogram_Plugin {
     message       = (plugin: *Metaprogram_Plugin, message: *Message) {
         if message.kind == .TYPECHECKED {
             typechecked := cast(*Message_Typechecked) message;
-            log_source :: (prefix: string, location: Code_Node.Location) {
-                #import "File";
-                if !location.enclosing_load {
-                    return;
-                }
-                path := location.enclosing_load.fully_pathed_filename;
-                source, success := read_entire_file(path, log_errors = false);
-                if !success {
-                    return;
-                }
-                defer free(source);
+            #if COMPILER_PLUGIN_DEBUGGING {
+                log_source :: (prefix: string, location: Code_Node.Location) {
+                    #import "File";
+                    if !location.enclosing_load {
+                        return;
+                    }
+                    path := location.enclosing_load.fully_pathed_filename;
+                    source, success := read_entire_file(path, log_errors = false);
+                    if !success {
+                        return;
+                    }
+                    defer free(source);
 
-                start, end := -1, -1;
-                line       := 1;
-                line_start := 0;
-                for source {
-                    if line == location.l0 && start < 0 {
-                        start = line_start + location.c0 - 1;
+                    start, end := -1, -1;
+                    line       := 1;
+                    line_start := 0;
+                    for source {
+                        if line == location.l0 && start < 0 {
+                            start = line_start + location.c0 - 1;
+                        }
+                        if line == location.l1 {
+                            end = line_start + location.c1 - 1;
+                            break;
+                        }
+                        if it == #char "\n" {
+                            line      += 1;
+                            line_start = it_index + 1;
+                        }
                     }
-                    if line == location.l1 {
-                        end = line_start + location.c1 - 1;
-                        break;
+                    if start < 0 || end < start {
+                        return;
                     }
-                    if it == #char "\n" {
-                        line      += 1;
-                        line_start = it_index + 1;
-                    }
+                    print("%: %:%:%: %\n", prefix, path, location.l0, location.c0, string.{end - start, source.data + start});
                 }
-                if start < 0 || end < start {
-                    return;
-                }
-                print("%: %:%:%: %\n", prefix, path, location.l0, location.c0, string.{end - start, source.data + start});
             }
             for typechecked_body: typechecked.procedure_bodies {
                 body := typechecked_body.expression;
@@ -6439,7 +6441,7 @@ get_plugin :: () -> *Metaprogram_Plugin {
                         for note: (cast(*Code_Procedure_Header) resolved).notes if     lower_compare(note.text, "scope")
                                                                                     || lower_compare(note.text, "component")
                                                                                     || lower_compare(note.text, "hook") {
-                            if COMPILER_PLUGIN_DEBUGGING {
+                            #if COMPILER_PLUGIN_DEBUGGING {
                                 log_source("found scope call", it.location);
                             }
                             array_add(*scope_locations, it.location);
@@ -6458,14 +6460,12 @@ get_plugin :: () -> *Metaprogram_Plugin {
                             break;
                         }
                         if matches {
-                            if COMPILER_PLUGIN_DEBUGGING {
+                            #if COMPILER_PLUGIN_DEBUGGING {
                                 log_source("wrapping in scope", call.location);
                             }
                             original  := New(Code_Procedure_Call);
                             original.* = call.*;
-
-                            open_scope_ident         := New(Code_Ident);
-                            open_scope_ident.location = call.location;
+ open_scope_ident         := New(Code_Ident); open_scope_ident.location = call.location;
                             open_scope_ident.name     = "open_scope";
 
                             open_scope_call                     := New(Code_Procedure_Call);
@@ -6497,7 +6497,7 @@ get_plugin :: () -> *Metaprogram_Plugin {
                                 if declaration.expression && declaration.expression.kind == .PROCEDURE_HEADER {
                                     inserted := cast(*Code_Procedure_Header) declaration.expression;
                                     if inserted.body_or_null && memcmp(*inserted.location, *header.location, size_of(Code_Node.Location)) == 0 {
-                                        if COMPILER_PLUGIN_DEBUGGING {
+                                        #if COMPILER_PLUGIN_DEBUGGING {
                                             log_source("restoring body", header.location);
                                         }
                                         header.body_or_null = inserted.body_or_null;
