@@ -4184,26 +4184,31 @@ use_input :: () {
         shaping_run = previous_text_node.shaping_run;
     }
 
-    if scheduled_scroll_to_cursor && previous_text_node != null {
+    previous_input_node := get_previous_node();
+    if scheduled_scroll_to_cursor && previous_text_node != null && previous_input_node != null {
         font_units_to_pixel := get_font_units_to_pixel(
             previous_text_node.style.font,
             previous_text_node.style.font_size
         );
         cursor_position: Vector2;
-        if cursor == value.count {
+        glyph_index := find_glyph_index_at_byte(shaping_run.glyphs, cursor);
+        if glyph_index == shaping_run.glyphs.count {
             cursor_position = (  peek(previous_text_node.glyph_positions)
                                + peek(shaping_run.glyphs).advance) * font_units_to_pixel;
         } else {
-            glyph_index := find_glyph_index_at_byte(shaping_run.glyphs, cursor);
             cursor_position = previous_text_node.glyph_positions[cursor] * font_units_to_pixel;
         }
-        // TO-DO: is this padding required?
-        // cursor_position.x += previous_input_node.style.padding.x.x
-        //                    + previous_input_node.style.border_width.x.x;
-        // cursor_position.y += previous_input_node.style.padding.y.x
-        //                    + previous_input_node.style.border_width.y.x;
-        context.input.scrolling_state.offset = cursor_position;
-        context.input.scrolling_state.effective_offset = cursor_position;
+        input_inner_size := Vector2.{
+            inner_size(previous_input_node.*, .HORIZONTAL),
+            inner_size(previous_input_node.*, .VERTICAL),
+        };
+        offset := context.input.scrolling_state.offset;
+        offset = Vector2.{
+            clamp(offset.x, cursor_position.x - input_inner_size.x, cursor_position.x),
+            clamp(offset.y, cursor_position.y - input_inner_size.y, cursor_position.y),
+        };
+        context.input.scrolling_state.offset = offset;
+        context.input.scrolling_state.effective_offset = offset;
     }
 
     // TO-DO: IME support
@@ -4362,14 +4367,14 @@ Caret :: (style: Style) {
 
         caret_position       : Vector2;
         if value.count > 0 && shaping_run.glyphs.count > 0 {
-            if cursor == value.count {
+            glyph_index := find_glyph_index_at_byte(shaping_run.glyphs, cursor);
+            if glyph_index == shaping_run.glyphs.count {
                 caret_position = (peek(glyph_positions) + peek(shaping_run.glyphs).advance) * font_units_to_pixel;
-                if peek(value) == #char "\n" {
+                if peek(value) == #char "\n" && cursor == value.count {
                     caret_position.x  = 0;
                     caret_position.y += line_height;
                 }
             } else {
-                glyph_index   := find_glyph_index_at_byte(shaping_run.glyphs, cursor);
                 caret_position = glyph_positions[glyph_index] * font_units_to_pixel;
             }
         }

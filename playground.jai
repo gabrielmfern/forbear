@@ -8,16 +8,16 @@ BUILD_FLAGS :: "-output_path .build +Iprof -modules";
 #import "forbear";
 
 Fps_Monitor :: () {
-    frames   := state(float64);
-    fps      := state(float64);
-    last     := state(float64);
+    frames := state(float64);
+    fps := state(float64);
+    last := state(float64);
 
     frames.* += 1;
-    now      := seconds_since_init();
+    now := seconds_since_init();
     if now - last.* >= 1 {
-        fps.*    = frames.*;
+        fps.* = frames.*;
         frames.* = 0;
-        last.*   = now;
+        last.* = now;
     }
 
     element(Style.{ width = grow(), y_justification = .CENTER }, #code {
@@ -26,11 +26,11 @@ Fps_Monitor :: () {
         });
         element(Style.{ width = grow() });
         element(Style.{
-            background    = color(rgb(239, 239, 239)),
+            background = color(rgb(239, 239, 239)),
             text_wrapping = .NONE,
-            min_width     = 152,
-            padding       = all(8),
-            direction     = .VERTICAL,
+            min_width = 152,
+            padding = all(8),
+            direction = .VERTICAL,
         }, #code {
             element(Style.{ width = grow() }, #code {
                 text("FPS:");
@@ -41,21 +41,21 @@ Fps_Monitor :: () {
     });
 }
 
-SAM_QUOTE :: "I know. It's all wrong. By rights we shouldn't even be here. But we are. It's like in the great stories, Mr. Frodo. The ones that really mattered. Full of darkness and danger, they were. And sometimes you didn't want to know the end. Because how could the end be happy? How could the world go back to the way it was when so much bad had happened? But in the end, it's only a passing thing, this shadow. Even darkness must pass. A new day will come. And when the sun shines it will shine out the clearer. Those were the stories that stayed with you. That meant something, even if you were too small to understand why. But I think, Mr. Frodo, I do understand. I know now. Folk in those stories had lots of chances of turning back, only they didn't. They kept going. Because they were holding on to something.";
+SAM_QUOTE :: "I know. It's all wrong. By rights we shouldn't ";
 
 render :: (data: *void) {
     push_frame_allocator();
     defer prepare_for_next_frame();
 
     element(Style.{
-        width           = grow(),
-        height          = grow(),
-        background      = color(rgb(255, 255, 255)),
-        color           = rgb(0, 0, 0),
-        font_size       = 16,
-        padding         = all(8),
-        text_wrapping   = .CHARACTER,
-        direction       = .VERTICAL,
+        width = grow(),
+        height = grow(),
+        background = color(rgb(255, 255, 255)),
+        color = rgb(0, 0, 0),
+        font_size = 16,
+        padding = all(8),
+        text_wrapping = .CHARACTER,
+        direction = .VERTICAL,
     }, #code {
         input := state([..]u8);
 
@@ -75,9 +75,11 @@ render :: (data: *void) {
             }
         });
 
-        input_state := scope(use_input_state(initial_value  = SAM_QUOTE,
-                                             initial_cursor = SAM_QUOTE.count - 1,
-                                             initial_selection_anchor = 0));
+        input_state := scope(use_input_state(
+            initial_value = SAM_QUOTE,
+            initial_cursor = SAM_QUOTE.count - 1,
+            initial_selection_anchor = 0
+        ));
         scope(Input(Style.{ width = fixed(500), text_wrapping = .WORD, height = fixed(200) }, input_state));
     });
 
@@ -85,12 +87,8 @@ render :: (data: *void) {
     draw(rgb(1.0, 1.0, 1.0));
 
     reset_temporary_storage();
-    if MEMORY_DEBUGGING {
-        memory_visualizer_per_frame_update();
-    }
-    #if #exists(__Iprof) {
-        context._Iprof.update(true);
-    }
+    #if MEMORY_DEBUGGING then memory_visualizer_per_frame_update();
+    #if #exists(__Iprof) then context._Iprof.update(true);
 }
 
 main :: () {
