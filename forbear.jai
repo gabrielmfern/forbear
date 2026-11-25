@@ -4161,192 +4161,6 @@ append :: (a: s64, b: s64, input: string) {
         selection_anchor = -1;
     }
 }
-// To make this hook thing generic for it to be builtin into forbear we need to:
-// - handle multiline text
-// - we should be moving the cursor by graphemes, not by glyphs
-use_input :: () {
-    using context.input.state;
-    // this is quite a bad experience to doing state. where is the child coming from before this state???
-    dragging_last_frame := state(false);
-    dragging := is_dragging(.LEFT);
-
-    shift := is_key_held(.SHIFT_LEFT) || is_key_held(.SHIFT_RIGHT);
-    ctrl := is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
-    alt := is_key_held(.ALT_LEFT) || is_key_held(.ALT_RIGHT);
-    super := is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT);
-    command := #ifx OS == .MACOS then super else ctrl;
-    by_word := #ifx OS == .MACOS then alt else ctrl;
-    by_line := (#ifx OS == .MACOS then super else false) || on_key_down(.HOME) || on_key_down(.END);
-
-    previous_text_node := get_previous_node(context.input.text_node_index);
-    shaping_run        : Shaping_Run;
-    if previous_text_node != null {
-        shaping_run = previous_text_node.shaping_run;
-    }
-
-    previous_input_node := get_previous_node();
-    if scheduled_scroll_to_cursor && previous_text_node != null && previous_input_node != null {
-        font_units_to_pixel := get_font_units_to_pixel(
-            previous_text_node.style.font,
-            previous_text_node.style.font_size
-        );
-        cursor_position: Vector2;
-        glyph_index := find_glyph_index_at_byte(shaping_run.glyphs, cursor);
-        if glyph_index == shaping_run.glyphs.count {
-            cursor_position = (  peek(previous_text_node.glyph_positions)
-                               + peek(shaping_run.glyphs).advance) * font_units_to_pixel;
-        } else {
-            cursor_position = previous_text_node.glyph_positions[cursor] * font_units_to_pixel;
-        }
-        input_inner_size := Vector2.{
-            inner_size(previous_input_node.*, .HORIZONTAL),
-            inner_size(previous_input_node.*, .VERTICAL),
-        };
-        offset := context.input.scrolling_state.offset;
-        offset = Vector2.{
-            clamp(offset.x, cursor_position.x - input_inner_size.x, cursor_position.x),
-            clamp(offset.y, cursor_position.y - input_inner_size.y, cursor_position.y),
-        };
-        context.input.scrolling_state.offset = offset;
-        context.input.scrolling_state.effective_offset = offset;
-    }
-
-    // TO-DO: IME support
-    append(cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_text_input());
-    value_string := to_string(value.data, value.count);
-
-    {
-        //
-        // === keyboard deletion and cursor movement handling ===
-        //
-        left  := on_key_down(.ARROW_LEFT, true)  || on_key_down(.HOME);
-        right := on_key_down(.ARROW_RIGHT, true) || on_key_down(.END);
-
-        if (left || right) && !shift && selection_anchor != -1 {
-            cursor = ifx left then min(cursor, selection_anchor) else max(cursor, selection_anchor);
-        }
-
-        previous := max(cursor - 1, 0);
-        next     := min(cursor + 1, value.count);
-        if by_word {
-            previous = previous_word_boundary(
-                value_string,
-                shaping_run.glyphs,
-                cursor
-            );
-            next = next_word_boundary(
-                value_string,
-                shaping_run.glyphs,
-                cursor
-            );
-        }
-        if by_line {
-            // TO-DO: to support multiline text here, we need this to go to the start of the current line,
-            // not to the start of the entire piece of text.
-            previous = 0;
-            // TO-DO: to support multiline text here, we need this to go to the end of the current line,
-            // not to the start of the entire piece of text.
-            next = value.count;
-        }
-
-        if left || right {
-            if shift && selection_anchor == -1                       then selection_anchor = cursor;
-            if shift || by_word || by_line || selection_anchor == -1 then {
-                cursor = ifx left then previous else next;
-                context.input.state.scheduled_scroll_to_cursor = true;
-            }
-            if !shift                                                then selection_anchor = -1;
-        }
-
-        if command && on_key_down(.A) {
-            selection_anchor = 0;
-            cursor = value.count;
-            context.input.state.scheduled_scroll_to_cursor = true;
-        }
-
-        backspace := on_key_down(.BACKSPACE, on_repeat = true);
-        if backspace || on_key_down(.DELETE, on_repeat = true) {
-            if selection_anchor != -1 then delete(cursor, selection_anchor);
-            else if backspace then delete(previous, cursor);
-            else delete(cursor, next);
-        }
-    }
-
-    if command && on_key_down(.V, on_repeat = true) {
-        append(cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_clipboard_text());
-    }
-
-    if command && on_key_down(.C) && selection_anchor != -1 && value.count > 0 {
-        start := min(cursor, selection_anchor);
-        end   := max(cursor, selection_anchor);
-        copy_to_clipboard(to_string(value.data + start, end - start));
-    }
-
-    if command && on_key_down(.X) && selection_anchor != -1 && value.count > 0 {
-        start := min(cursor, selection_anchor);
-        end   := max(cursor, selection_anchor);
-        copy_to_clipboard(to_string(value.data + start, end - start));
-        delete(cursor, selection_anchor);
-        selection_anchor = -1;
-    }
-
-    if command && !shift && on_key_down(.Z, on_repeat = true) && edit_history.count > 0 {
-        edit := pop(*edit_history);
-        if edit.inserted_length > 0 {
-            if edit.inserted_index == -1 {
-                edit.inserted_index = history_storage.count;
-                array_add(*history_storage, ..array_view(value, edit.where, edit.inserted_length));
-            }
-            array_ordered_remove_interval(*value, edit.where, edit.inserted_length);
-        }
-        if edit.deleted_length > 0 {
-            array_insert_at(*value, edit.where, array_view(history_storage, edit.deleted_index, edit.deleted_length));
-        }
-        cursor = edit.cursor_before;
-        context.input.state.scheduled_scroll_to_cursor = true;
-        selection_anchor = edit.selection_anchor_before;
-        array_add(*undo_history, edit);
-    }
-    if command && shift && on_key_down(.Z, on_repeat = true) && undo_history.count > 0 {
-        edit := pop(*undo_history);
-        if edit.deleted_length > 0 {
-            array_ordered_remove_interval(*value, edit.where, edit.deleted_length);
-        }
-        if edit.inserted_length > 0 {
-            array_insert_at(*value, edit.where, array_view(history_storage, edit.inserted_index, edit.inserted_length));
-        }
-        cursor = edit.where + edit.inserted_length;
-        context.input.state.scheduled_scroll_to_cursor = true;
-        selection_anchor = -1;
-        array_add(*edit_history, edit);
-    }
-
-    if dragging {
-        if !dragging_last_frame.* then selection_anchor = scope(use_glyph_closest_to(get_press_position()));
-        mouse_glyph := scope(use_glyph_closest_to(get_mouse_position()));
-        if mouse_glyph != -1 {
-            cursor = mouse_glyph;
-            context.input.state.scheduled_scroll_to_cursor = true;
-        }
-    }
-    dragging_last_frame.* = dragging;
-    if on_click(movement_threshold = true) {
-        mouse_glyph := scope(use_glyph_closest_to(get_mouse_position()));
-        if !shift then selection_anchor = -1;
-        else if selection_anchor == -1 then selection_anchor = cursor;
-        if mouse_glyph != -1 {
-            cursor = mouse_glyph;
-            context.input.state.scheduled_scroll_to_cursor = true;
-        }
-    }
-    if cursor < 0 || cursor > value.count {
-        cursor = clamp(cursor, 0, value.count);
-        context.input.state.scheduled_scroll_to_cursor = true;
-    }
-    if selection_anchor > value.count then selection_anchor = value.count;
-    if     on_key_down(.ESCAPE)
-        || (selection_anchor == cursor && !dragging) then selection_anchor = -1;
-}
 Caret :: (style: Style) {
     previous_input_node := get_previous_node();
     previous_text_node := get_previous_node(context.input.text_node_index);
@@ -4428,14 +4242,209 @@ Input :: (style: Style, input_state: *Input_State, body: Code = "", input_charac
         width           = fixed(250.0),
         children_offset = -scrolling_state.effective_offset,
     }, style), #code {
+        dragging_last_frame := state(false);
+        dragging := is_dragging(.LEFT);
+
+        using context.input.state;
+
+        // TO-DO: IME support
+        append(cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_text_input());
+        value_string := to_string(value.data, value.count);
+
         context.input.text_node_index = text(
             Style.{ z_index = 2, },
             to_string(input_state.value.data, input_state.value.count)
         );
+
         scope(Selection(Style.{}));
         scope(Caret(Style.{}));
         scope(use_scrolling(scrolling_state));
-        scope(use_input());
+
+        shift := is_key_held(.SHIFT_LEFT) || is_key_held(.SHIFT_RIGHT);
+        ctrl := is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
+        alt := is_key_held(.ALT_LEFT) || is_key_held(.ALT_RIGHT);
+        super := is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT);
+        command := #ifx OS == .MACOS then super else ctrl;
+        by_word := #ifx OS == .MACOS then alt else ctrl;
+        by_line := (#ifx OS == .MACOS then super else false) || on_key_down(.HOME) || on_key_down(.END);
+
+        previous_text_node := get_previous_node(context.input.text_node_index);
+        shaping_run: Shaping_Run;
+        if previous_text_node != null {
+            shaping_run = previous_text_node.shaping_run;
+        }
+
+        previous_input_node := get_previous_node();
+        if scheduled_scroll_to_cursor && previous_text_node != null && previous_input_node != null {
+            font_units_to_pixel := get_font_units_to_pixel(
+                previous_text_node.style.font,
+                previous_text_node.style.font_size
+            );
+            cursor_position: Vector2;
+            glyph_index := find_glyph_index_at_byte(shaping_run.glyphs, cursor);
+            if glyph_index == shaping_run.glyphs.count {
+                cursor_position = (  peek(previous_text_node.glyph_positions)
+                                   + peek(shaping_run.glyphs).advance) * font_units_to_pixel;
+            } else {
+                cursor_position = previous_text_node.glyph_positions[cursor] * font_units_to_pixel;
+            }
+            input_inner_size := Vector2.{
+                inner_size(previous_input_node.*, .HORIZONTAL),
+                inner_size(previous_input_node.*, .VERTICAL),
+            };
+            offset := context.input.scrolling_state.offset;
+            offset = Vector2.{
+                clamp(offset.x, cursor_position.x - input_inner_size.x, cursor_position.x),
+                clamp(offset.y, cursor_position.y - input_inner_size.y, cursor_position.y),
+            };
+            context.input.scrolling_state.offset = offset;
+            context.input.scrolling_state.effective_offset = offset;
+        }
+
+        {
+            //
+            // === keyboard deletion and cursor movement handling ===
+            //
+            left := on_key_down(.ARROW_LEFT, true) || on_key_down(.HOME);
+            right := on_key_down(.ARROW_RIGHT, true) || on_key_down(.END);
+
+            if (left || right) && !shift && selection_anchor != -1 {
+                cursor = ifx left then min(cursor, selection_anchor) else max(cursor, selection_anchor);
+            }
+
+            // TO-DO: these should find the next cursor byte that's at the boundary of another grapheme.
+            previous := max(cursor - 1, 0);
+            // TO-DO: these should find the next cursor byte that's at the boundary of another grapheme.
+            next := min(cursor + 1, value.count);
+            if by_word {
+                previous = previous_word_boundary(
+                    value_string,
+                    shaping_run.glyphs,
+                    cursor
+                );
+                next = next_word_boundary(
+                    value_string,
+                    shaping_run.glyphs,
+                    cursor
+                );
+            }
+            if by_line {
+                // TO-DO: to support multiline text here, we need this to go to the start of the current line,
+                // not to the start of the entire piece of text.
+                previous = 0;
+                // TO-DO: to support multiline text here, we need this to go to the end of the current line,
+                // not to the start of the entire piece of text.
+                next = value.count;
+            }
+
+            if left || right {
+                if shift && selection_anchor == -1 then selection_anchor = cursor;
+                if shift || by_word || by_line || selection_anchor == -1 then {
+                    cursor = ifx left then previous else next;
+                    context.input.state.scheduled_scroll_to_cursor = true;
+                }
+                if !shift then selection_anchor = -1;
+            }
+
+            if command && on_key_down(.A) {
+                selection_anchor = 0;
+                cursor = value.count;
+                context.input.state.scheduled_scroll_to_cursor = true;
+            }
+
+            backspace := on_key_down(.BACKSPACE, on_repeat = true);
+            if backspace || on_key_down(.DELETE, on_repeat = true) {
+                if selection_anchor != -1 then delete(cursor, selection_anchor);
+                else if backspace then delete(previous, cursor);
+                else delete(cursor, next);
+            }
+        }
+
+        if command && on_key_down(.V, on_repeat = true) {
+            append(cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_clipboard_text());
+        }
+
+        if command && on_key_down(.C) && selection_anchor != -1 && value.count > 0 {
+            start := min(cursor, selection_anchor);
+            end := max(cursor, selection_anchor);
+            copy_to_clipboard(to_string(value.data + start, end - start));
+        }
+
+        if command && on_key_down(.X) && selection_anchor != -1 && value.count > 0 {
+            start := min(cursor, selection_anchor);
+            end := max(cursor, selection_anchor);
+            copy_to_clipboard(to_string(value.data + start, end - start));
+            delete(cursor, selection_anchor);
+            selection_anchor = -1;
+        }
+
+        if command && !shift && on_key_down(.Z, on_repeat = true) && edit_history.count > 0 {
+            edit := pop(*edit_history);
+            if edit.inserted_length > 0 {
+                if edit.inserted_index == -1 {
+                    edit.inserted_index = history_storage.count;
+                    array_add(
+                        *history_storage,
+                        ..array_view(value, edit.where, edit.inserted_length)
+                    );
+                }
+                array_ordered_remove_interval(*value, edit.where, edit.inserted_length);
+            }
+            if edit.deleted_length > 0 {
+                array_insert_at(
+                    *value,
+                    edit.where,
+                    array_view(history_storage, edit.deleted_index, edit.deleted_length)
+                );
+            }
+            cursor = edit.cursor_before;
+            context.input.state.scheduled_scroll_to_cursor = true;
+            selection_anchor = edit.selection_anchor_before;
+            array_add(*undo_history, edit);
+        }
+        if command && shift && on_key_down(.Z, on_repeat = true) && undo_history.count > 0 {
+            edit := pop(*undo_history);
+            if edit.deleted_length > 0 {
+                array_ordered_remove_interval(*value, edit.where, edit.deleted_length);
+            }
+            if edit.inserted_length > 0 {
+                array_insert_at(
+                    *value,
+                    edit.where,
+                    array_view(history_storage, edit.inserted_index, edit.inserted_length)
+                );
+            }
+            cursor = edit.where + edit.inserted_length;
+            context.input.state.scheduled_scroll_to_cursor = true;
+            selection_anchor = -1;
+            array_add(*edit_history, edit);
+        }
+
+        if dragging {
+            if !dragging_last_frame.* then selection_anchor = scope(use_glyph_closest_to(get_press_position()));
+            mouse_glyph := scope(use_glyph_closest_to(get_mouse_position()));
+            if mouse_glyph != -1 {
+                cursor = mouse_glyph;
+                context.input.state.scheduled_scroll_to_cursor = true;
+            }
+        }
+        dragging_last_frame.* = dragging;
+        if on_click(movement_threshold = true) {
+            mouse_glyph := scope(use_glyph_closest_to(get_mouse_position()));
+            if !shift then selection_anchor = -1;
+            else if selection_anchor == -1 then selection_anchor = cursor;
+            if mouse_glyph != -1 {
+                cursor = mouse_glyph;
+                context.input.state.scheduled_scroll_to_cursor = true;
+            }
+        }
+        if cursor < 0 || cursor > value.count {
+            cursor = clamp(cursor, 0, value.count);
+            context.input.state.scheduled_scroll_to_cursor = true;
+        }
+        if selection_anchor > value.count then selection_anchor = value.count;
+        if     on_key_down(.ESCAPE)
+            || (selection_anchor == cursor && !dragging) then selection_anchor = -1;
 
         #insert body;
     });
@@ -5617,14 +5626,14 @@ shape_text :: (style: Complete_Style, text: string) -> Shaping_Run {
                 continue;
             }
 
-            utf8_encoded    := kbts_EncodeUtf8(shape_codepoint.Codepoint);
+            utf8_encoded := kbts_EncodeUtf8(shape_codepoint.Codepoint);
 
-            advance         := Vector2.{ xx shaping_glyph.AdvanceX, xx shaping_glyph.AdvanceY };
-            offset          := Vector2.{ xx shaping_glyph.OffsetX, xx shaping_glyph.OffsetY };
-            utf8            : string;
-            utf8.data        = utf8_encoded.Encoded.data;
-            utf8.count       = utf8_encoded.EncodedLength;
-            is_linebreak    := starts_with(utf8, "\n");
+            advance := Vector2.{ xx shaping_glyph.AdvanceX, xx shaping_glyph.AdvanceY };
+            offset := Vector2.{ xx shaping_glyph.OffsetX, xx shaping_glyph.OffsetY };
+            utf8 : string;
+            utf8.data = utf8_encoded.Encoded.data;
+            utf8.count = utf8_encoded.EncodedLength;
+            is_linebreak := starts_with(utf8, "\n");
             can_wrap_before := (shape_codepoint.BreakFlags
                               & xx kbts_break_flags_enum.KBTS_BREAK_FLAG_LINE_SOFT) != 0;
             if is_linebreak {
@@ -5671,8 +5680,8 @@ shape_text :: (style: Complete_Style, text: string) -> Shaping_Run {
 
 Frame_Arena :: struct {
     allocator: Allocator;
-    // two pools, one for each frame that we swap between so that we can keep last frame's node tree and everything
-    // allocated
+    // two pools, one for each frame that we swap between so that we can keep last frame's node tree
+    // and everything allocated
     pools:     [2]Flat_Pool;
     current:   s64;
 };
@@ -5723,12 +5732,14 @@ Forbear :: struct {
 #add_context forbear: *Forbear;
 // Expected that this procedure would be called with a non pool allocator.
 //
-// The glyph atlas's table, the node tree, the measurements and the shaping cache are all allocated in the persistent
-// allocator and are never freed. They last the entire lifetime of the program and never shrink either.
+// The glyph atlas's table, the node tree, the measurements and the shaping cache are all allocated
+// in the persistent allocator and are never freed. They last the entire lifetime of the program and
+// never shrink either.
 init_forbear :: (forbear:            *Forbear,
                  program_frame_arena: *Frame_Arena,
-                 // TO-DO: currently we're defining the specific backend names to be just one here, but in the long-term we will include
-                 // multiple backends for each operating system, not one, so we need to handle that in a better way.
+                 // TO-DO: currently we're defining the specific backend names to be just one here,
+                 // but in the long-term we will include multiple backends for each operating
+                 // system, not one, so we need to handle that in a better way.
                  program_backend:    *Backend,
                  program_window:     *Window,
                  program_base_style: Base_Style) {
@@ -6258,18 +6269,13 @@ layout :: () {
                 if node.shaping_run.glyphs.count > 0 && node.style.text_wrapping != .NONE {
                     using node.shaping_run;
                     positions := node.glyph_positions;
-
-                    Line :: struct {
-                        start: s64;
-                        end:   s64;
-                    }
-                    lines                : [..]Line;
-                    line_end             := (node.size.x - fitting_base(node, .HORIZONTAL)) / font_units_to_point;
-                    pen                  : Vector2;
+                    Line :: struct { start: s64; end: s64; }
+                    lines: [..]Line;
+                    line_end := (  node.size.x
+                                 - fitting_base(node, .HORIZONTAL)) / font_units_to_point;
+                    pen: Vector2;
                     line_start_index: s64 = 0;
-
                     break_cursor: s64 = 0;
-
                     if node.style.text_wrapping == {
                         case .CHARACTER;
                             for *glyph: glyphs {
@@ -6370,7 +6376,9 @@ layout :: () {
                         end_x := positions[line.end].x + glyphs[line.end].advance.x;
 
                         width := end_x - start_x;
-                        line_positions := array_view(positions, line.start, line.end + 1 - line.start);
+                        line_positions := array_view(positions, line.start,  line.end
+                                                                           + 1
+                                                                           - line.start);
                         for *position: line_positions {
                             if node.style.x_justification == {
                                 case .START;
