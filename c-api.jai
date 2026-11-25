@@ -34,7 +34,7 @@ Math :: #import "Math";
             .{os = .WINDOWS, cpu = .X64,   macro = "_WIN32",    window = "Windows_GL_Window",  backend = "Windows_GL_Backend"},
             .{os = .LINUX,   cpu = .X64,   macro = "__linux__", window = "Wayland_EGL_Window", backend = "Wayland_EGL_Backend"},
             .{os = .MACOS,   cpu = .ARM64, macro = "__APPLE__", window = "MacOS_GL_Window",    backend = "MacOS_GL_Backend"},
-            .{os = OS,       cpu = CPU,    javascript = true},
+            .{os = OS,       cpu = CPU,    javascript = false},
         ];
 
         skip_javascript := array_find(get_build_options().compile_time_command_line, "no_javascript");
@@ -534,10 +534,6 @@ Math :: #import "Math";
         push_context frame_context { return use_spring_transition(target, config); }
     }
 
-    #program_export
-    fb_schedule_scroll :: (state: *Scrolling_State, position: Vector2, animate: bool) #c_call {
-        push_context frame_context { schedule_scroll(state, position, animate); }
-    }
     #program_export
     fb_use_scrolling :: (state: *Scrolling_State) #c_call { push_context frame_context { use_scrolling(state); } }
 
