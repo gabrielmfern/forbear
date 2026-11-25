@@ -4298,15 +4298,23 @@ use_input :: () {
     // TO-DO: IME support
     // TO-DO(next): control characters are currently typed in on macOS and that's unusable
     append(cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_text_input());
-    if command && on_key_down(.V, on_repeat = true) {
+    paste := command && on_key_down(.V, on_repeat = true);
+    copy  := command && on_key_down(.C);
+    cut   := command && on_key_down(.X);
+    #if OS == .WINDOWS {
+        paste = paste || (shift && on_key_down(.INSERT, on_repeat = true));
+        copy  = copy  || (command && on_key_down(.INSERT));
+        cut   = cut   || (shift && on_key_down(.DELETE));
+    }
+    if paste {
         append(cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_clipboard_text());
     }
-    if command && on_key_down(.C) && selection_anchor != -1 && value.count > 0 {
+    if copy && selection_anchor != -1 && value.count > 0 {
         start := min(cursor, selection_anchor);
         end := max(cursor, selection_anchor);
         copy_to_clipboard(to_string(value.data + start, end - start));
     }
-    if command && on_key_down(.X) && selection_anchor != -1 && value.count > 0 {
+    if cut && selection_anchor != -1 && value.count > 0 {
         start := min(cursor, selection_anchor);
         end := max(cursor, selection_anchor);
         copy_to_clipboard(to_string(value.data + start, end - start));
@@ -4367,7 +4375,12 @@ use_input :: () {
         }
 
         backspace := on_key_down(.BACKSPACE, on_repeat = true);
-        if backspace || on_key_down(.DELETE, on_repeat = true) {
+        forward   := on_key_down(.DELETE, on_repeat = true);
+        #if OS == .WINDOWS {
+            backspace = backspace && !alt;
+            forward   = forward && !shift;
+        }
+        if backspace || forward {
             if selection_anchor != -1 then delete(cursor, selection_anchor);
             else if backspace then delete(previous, cursor);
             else delete(cursor, next);
@@ -4388,11 +4401,9 @@ use_input :: () {
 
         // TO-DO(next): we should be merging undo/redo events based on conditions that make it
         // feel more useful and familiar to people.
-        undo: bool;
+        undo := command && !shift && on_key_down(.Z, on_repeat = true);
         #if OS == .WINDOWS {
-            undo = command && on_key_down(.Z, on_repeat = true);
-        } else {
-            undo = command && !shift && on_key_down(.Z, on_repeat = true);
+            undo = undo || (alt && !shift && on_key_down(.BACKSPACE, on_repeat = true));
         }
         if undo && edit_history.count > 0 {
             edit := pop(*edit_history);
@@ -4418,11 +4429,11 @@ use_input :: () {
             selection_anchor = edit.selection_anchor_before;
             array_add(*undo_history, edit);
         }
-        redo: bool;
+        redo := command && shift && on_key_down(.Z, on_repeat = true);
         #if OS == .WINDOWS {
-            redo = command && on_key_down(.Y, on_repeat = true);
-        } else {
-            redo = command && shift && on_key_down(.Z, on_repeat = true);
+            redo = redo
+                || (command && on_key_down(.Y, on_repeat = true))
+                || (alt && shift && on_key_down(.BACKSPACE, on_repeat = true));
         }
         if redo && undo_history.count > 0 {
             edit := pop(*undo_history);
@@ -4491,7 +4502,7 @@ Input :: (style: Style, input_state: *Input_State, body: Code = "", input_charac
         border_width = all(1),
         border_radius = 2,
         padding = in_line(bottom(top(10), 30), 5),
-        cursor = .TEXT
+        cursor = .TEXT,
         direction = .VERTICAL,
         text_wrapping = .NONE,
         y_justification = .CENTER,
