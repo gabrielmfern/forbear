@@ -81,7 +81,8 @@ Counter :: () {
     });
 
     text(Style.{font_size = 32}, sprint("Count: %", counter.*));
-} @component
+}
+// Call it as `scope(Counter());` to give it its own state.
 ```
 
 ## Why?

@@ -1,4 +1,4 @@
-BUILD_FLAGS :: "-output_path .build +forbear";
+BUILD_FLAGS :: "-output_path .build";
 
 #import "Basic";
 #import "File";
@@ -8,10 +8,6 @@ backend: Backend;
 window:  Window;
 forbear: Forbear;
 inter := #run create_font(read_entire_file("Inter.ttf"));
-
-Root_Component :: () {
-    text("hey");
-} @component
 
 #add_context suites: [..]string;
 main :: () {
@@ -65,60 +61,18 @@ main :: () {
         assert(tree[index].parent == parent_index, "parent=%", tree[index].parent);
     }
 
-    describe("compiler plugin", #code {
-        //
-        // ==== compiler plugin tests ====
-        //
-        test("components should get a scope node, and its children should be inserted too", #code {
-            Root_Component();
-
-            assert(context.forbear.node_trees[context.forbear.frame % 2].count == 2, "count=%", context.forbear.node_trees[context.forbear.frame % 2].count);
-            shallow_node_assert(0, .SCOPE, -1);
-            shallow_node_assert(1, .ELEMENT, -1);
-        });
-
-        test("local components should get a scope node, and its children should be inserted too", #code {
-            My_Component :: () {
-                print("my component ran\n");
-                text("My_Component did run\n");
-            } @component
-            My_Component();
-
-            assert(context.forbear.node_trees[context.forbear.frame % 2].count == 2, "count=%", context.forbear.node_trees[context.forbear.frame % 2].count);
-            shallow_node_assert(0, .SCOPE, -1);
-            shallow_node_assert(1, .ELEMENT, -1);
-        });
-
-        test("components shuold work just fine with other local procedures", #code {
-            My_Component :: () {
-                print("My Component did run\n");
-                text("hey");
-            } @component
-            calculate_something :: () -> float {
-                return 151512 / 2323;
+    describe("scope", #code {
+        test("the same component called from a macro's own body gets a different key per call", #code {
+            Child :: () {
+                element(Style.{width = fixed(10), height = fixed(10)});
             }
-            My_Component();
-            assert(calculate_something() == 151512 / 2323, "calculate_something()=%", calculate_something());
-            text("%", calculate_something());
-
-            assert(context.forbear.node_trees[context.forbear.frame % 2].count == 3, "count=%", context.forbear.node_trees[context.forbear.frame % 2].count);
-            shallow_node_assert(0, .SCOPE, -1);
-            shallow_node_assert(1, .ELEMENT, -1);
-            shallow_node_assert(2, .ELEMENT, -1);
-        });
-
-        test("components called inside #code should get a scope node, so their elements get different keys", #code {
-            Child_In_Code :: () {
-                Child :: () {
-                    element(Style.{width = fixed(10), height = fixed(10)});
-                } @component
-
+            Box :: () #expand {
                 element(Style.{}, #code {
-                    Child();
-                    Child();
+                    scope(Child());
+                    scope(Child());
                 });
-            } @component
-            Child_In_Code();
+            }
+            scope(Box());
 
             tree := context.forbear.node_trees[context.forbear.frame % 2];
             assert(tree.count == 6, "count=%", tree.count);
@@ -129,73 +83,6 @@ main :: () {
             shallow_node_assert(4, .SCOPE, 1);
             shallow_node_assert(5, .ELEMENT, 1);
             assert(tree[3].key != tree[5].key, "both children have key %", tree[3].key);
-        });
-
-        test("local macros inside #code should keep their elements", #code {
-            Child :: () {
-                element(Style.{width = fixed(10), height = fixed(10)});
-            } @component
-            Box :: (body: Code) #expand {
-                element(Style.{width = fixed(10), height = fixed(10)}, #code {
-                    #insert body;
-                });
-            } @component
-
-            Child();
-            Box(#code {
-                Child();
-            });
-
-            tree := context.forbear.node_trees[context.forbear.frame % 2];
-            assert(tree.count == 6, "count=%", tree.count);
-            shallow_node_assert(0, .SCOPE, -1);
-            shallow_node_assert(1, .ELEMENT, -1);
-            shallow_node_assert(2, .SCOPE, -1);
-            shallow_node_assert(3, .ELEMENT, -1);
-            shallow_node_assert(4, .SCOPE, 3);
-            shallow_node_assert(5, .ELEMENT, 3);
-        });
-
-        test("components called from a macro's own body should get a scope node", #code {
-            Child :: () {
-                element(Style.{width = fixed(10), height = fixed(10)});
-            } @component
-            Box :: () #expand {
-                element(Style.{width = fixed(10), height = fixed(10)}, #code {
-                    Child();
-                });
-            } @component
-
-            Box();
-
-            tree := context.forbear.node_trees[context.forbear.frame % 2];
-            assert(tree.count == 4, "count=%", tree.count);
-            shallow_node_assert(0, .SCOPE, -1);
-            shallow_node_assert(1, .ELEMENT, -1);
-            shallow_node_assert(2, .SCOPE, 1);
-            shallow_node_assert(3, .ELEMENT, 1);
-        });
-
-        test("components that return values should work", #code {
-            Button :: () -> string {
-                clicked := false;
-                element(Style.{width = fixed(10), height = fixed(10)}, #code {
-                    clicked = on_click();
-                });
-                if clicked {
-                    return "hey dude, you've been clicked";
-                } else {
-                    return "oh no, you've not been clicked";
-                }
-            } @component
-
-            click_message := Button();
-            assert(click_message == "oh no, you've not been clicked", "click_message == %", click_message);
-
-            tree := context.forbear.node_trees[context.forbear.frame % 2];
-            assert(tree.count == 2, "count=%", tree.count);
-            shallow_node_assert(0, .SCOPE, -1);
-            shallow_node_assert(1, .ELEMENT, -1);
         });
     });
 

@@ -45,5 +45,5 @@ if ($LASTEXITCODE) { throw "Could not extract $archive" }
 Remove-Item $download
 
 Write-Host "Run: cd $dir"
-if ($language -eq 'jai') { Write-Host '     jai main.jai +forbear' } else { Write-Host '     .\build.bat' }
+if ($language -eq 'jai') { Write-Host '     jai main.jai' } else { Write-Host '     .\build.bat' }
 }

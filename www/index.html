@@ -143,7 +143,8 @@
     <span style="color:#9a9da1">});</span>
 
     <span style="color:#c6b076">text</span><span style="color:#9a9da1">(</span><span style="color:#d8dadc">Style</span><span style="color:#9a9da1">.{</span>font_size = <span style="color:#7fa0b8">32</span><span style="color:#9a9da1">}, </span><span style="color:#c6b076">sprint</span><span style="color:#9a9da1">(</span><span style="color:#b8a36a">"Count: %"</span><span style="color:#9a9da1">, </span>counter<span style="color:#9a9da1">.</span>*<span style="color:#9a9da1">));</span>
-<span style="color:#9a9da1">} </span><span style="color:#86a5bf">@component</span></code></pre>
+<span style="color:#9a9da1">}</span>
+<span style="color:#7f9a78">// Call it as `scope(Counter());` to give it its own state.</span></code></pre>
 <pre id="at-a-glance-c" role="tabpanel" hidden class="my-0"><code><span style="color:#d8dadc">void </span><span style="color:#c6b076">Counter</span><span style="color:#9a9da1">(</span><span style="color:#d8dadc">void</span><span style="color:#9a9da1">) {</span>
     <span style="color:#7f9a78">// State is stored in a 16MB static buffer with no heap allocations.</span>
     fb_s64 *counter = <span style="color:#c6b076">FB_STATE</span><span style="color:#9a9da1">(</span>fb_s64<span style="color:#9a9da1">);</span>

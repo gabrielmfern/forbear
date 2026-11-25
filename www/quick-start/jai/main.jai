@@ -1,7 +1,5 @@
 MEMORY_DEBUGGING :: false;
 
-BUILD_FLAGS :: "+forbear";
-
 #import "Basic"()(MEMORY_DEBUGGER = MEMORY_DEBUGGING);
 #import "File";
 #import "GL";
@@ -39,7 +37,7 @@ Fps_Monitor :: () {
             });
         });
     });
-} @component
+}
 
 Counter :: () {
     // This gives us back a pointer to the counter's value. Since no initial value
@@ -90,11 +88,7 @@ Counter :: () {
     });
 
     text(Style.{font_size = 32}, "Count: %", counter.*);
-} @component
-  // The `@component` is handled by a compiler plugin that's defined in the
-  // `modules/forbear/module.jai` as well. It goes through all calls of functions with this
-  // annotation and wraps them in a `scope(#code ...)` which makes these handle
-  // state properly.
+}
 
 App :: () {
     element(Style.{
@@ -107,16 +101,16 @@ App :: () {
         text_wrapping = .CHARACTER,
         direction = .VERTICAL,
     }, #code {
-        Fps_Monitor();
-        Counter();
+        scope(Fps_Monitor());
+        scope(Counter());
     });
-} @component
+}
 
 render :: (data: *void) {
     push_frame_allocator();
     defer prepare_for_next_frame();
 
-    App();
+    scope(App());
 
     layout();
     draw(rgb(0.0, 0.0, 0.0));

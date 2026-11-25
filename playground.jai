@@ -1,6 +1,6 @@
 MEMORY_DEBUGGING :: false;
 
-BUILD_FLAGS :: "-output_path .build +forbear +Iprof -modules";
+BUILD_FLAGS :: "-output_path .build +Iprof -modules";
 
 #import "Basic"()(MEMORY_DEBUGGER = MEMORY_DEBUGGING);
 #import "File";
@@ -39,7 +39,7 @@ Fps_Monitor :: () {
             });
         });
     });
-} @component
+}
 
 SAM_QUOTE :: "I know. It's all wrong. By rights we shouldn't even be here. But we are. It's like in the great stories, Mr. Frodo. The ones that really mattered. Full of darkness and danger, they were. And sometimes you didn't want to know the end. Because how could the end be happy? How could the world go back to the way it was when so much bad had happened? But in the end, it's only a passing thing, this shadow. Even darkness must pass. A new day will come. And when the sun shines it will shine out the clearer. Those were the stories that stayed with you. That meant something, even if you were too small to understand why. But I think, Mr. Frodo, I do understand. I know now. Folk in those stories had lots of chances of turning back, only they didn't. They kept going. Because they were holding on to something.";
 
@@ -59,8 +59,8 @@ render :: (data: *void) {
     }, #code {
         input := state([..]u8);
 
-        use_scrolling();
-        Fps_Monitor();
+        scope(use_scrolling());
+        scope(Fps_Monitor());
         element(Style.{
             background = color(rgb(255, 0, 0)),
             width = fixed(200),
@@ -75,10 +75,10 @@ render :: (data: *void) {
             }
         });
 
-        input_state := use_input_state(initial_value  = SAM_QUOTE,
-                                       initial_cursor = SAM_QUOTE.count - 1,
-                                       initial_selection_anchor = 0);
-        Input(Style.{ width = fixed(500), text_wrapping = .WORD, height = fixed(200) }, input_state);
+        input_state := scope(use_input_state(initial_value  = SAM_QUOTE,
+                                             initial_cursor = SAM_QUOTE.count - 1,
+                                             initial_selection_anchor = 0));
+        scope(Input(Style.{ width = fixed(500), text_wrapping = .WORD, height = fixed(200) }, input_state));
     });
 
     layout();

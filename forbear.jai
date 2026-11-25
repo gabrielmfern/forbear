@@ -914,15 +914,17 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
 
         running := true;
     };
-    init_window :: (backend: *MacOS_GL_Backend,
-                    window:  *MacOS_GL_Window,
-                    width:   float64,
-                    height:  float64,
-                    title:   string,
-                    min_width  := FLOAT64_NAN,
-                    min_height := FLOAT64_NAN,
-                    max_width  := FLOAT64_NAN,
-                    max_height := FLOAT64_NAN) {
+    init_window :: (
+        backend: *MacOS_GL_Backend,
+        window: *MacOS_GL_Window,
+        width: float64,
+        height: float64,
+        title: string,
+        min_width := FLOAT64_NAN,
+        min_height := FLOAT64_NAN,
+        max_width := FLOAT64_NAN,
+        max_height := FLOAT64_NAN
+    ) {
         rectangle := NSRect.{ size = .{ width = width, height = height } };
         window.theme = .LIGHT;
 
@@ -1820,15 +1822,17 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         fbo: GLuint;
         busy: bool;
     };
-    init_window :: (backend: *Backend,
-                    window:  *Wayland_EGL_Window,
-                    width:   float64,
-                    height:  float64,
-                    title:   string,
-                    min_width  := FLOAT64_NAN,
-                    min_height := FLOAT64_NAN,
-                    max_width  := FLOAT64_NAN,
-                    max_height := FLOAT64_NAN) {
+    init_window :: (
+        backend: *Backend,
+        window: *Wayland_EGL_Window,
+        width: float64,
+        height: float64,
+        title: string,
+        min_width := FLOAT64_NAN,
+        min_height := FLOAT64_NAN,
+        max_width := FLOAT64_NAN,
+        max_height := FLOAT64_NAN
+    ) {
         window.logical_width = xx width;
         window.logical_height = xx height;
         window.theme = .LIGHT;
@@ -3791,7 +3795,7 @@ use_transition :: (value: $T, duration: float, easing: (float) -> float) -> T
         progress.* = 0.0;
     }
     return current;
-} @hook
+}
 Spring_Config :: struct (T: Type) {
     stiffness: float;
     damping:   float;
@@ -3829,7 +3833,7 @@ use_spring_transition :: (target: $T, config: Spring_Config(T)) -> T
         }
     }
     return value.*;
-} @hook
+}
 Scrolling_State :: struct {
     offset:           Vector2;
     effective_offset: Vector2;
@@ -3838,12 +3842,12 @@ use_scrolling :: () {
     scrolling_state := state(Scrolling_State);
     scrolling_container := get_node();
     if scrolling_container != null {
-        use_scrolling(scrolling_state);
+        scope(use_scrolling(scrolling_state));
         scrolling_container.style.children_offset = -scrolling_state.effective_offset;
     } else {
         log_error("use_scrolling won't work unless it receives a state itself, or is inside a node that's meant to be the scrolling container.");
     }
-} @hook
+}
 // TO-DO: This must be able to handle choosing between all nodes that can scroll to scroll only one of them.
 //
 // Besides only scrolling one of them, once one scrolling container is done with the scrolling and the user keeps
@@ -3870,12 +3874,12 @@ use_scrolling :: (using state: *Scrolling_State) {
             clamp(offset.y, 0, limit_y),
         };
     }
-    effective_offset = use_spring_transition(offset, .{
+    effective_offset = scope(use_spring_transition(offset, .{
         stiffness = 320.0,
         damping   = 32.0,
         mass      = 1.0,
         current   = *effective_offset,
-    });
+    }));
     if !isnan(limit_x) {
         assert(!isnan(limit_y));
         effective_offset = Vector2.{
@@ -3883,7 +3887,7 @@ use_scrolling :: (using state: *Scrolling_State) {
             clamp(effective_offset.y, 0, limit_y),
         };
     }
-} @hook
+}
 find_glyph_index_at_byte :: (glyphs: []Glyph, byte_index: s64) -> s64 {
     glyph_index := 0;
     while glyph_index < glyphs.count && glyphs[glyph_index].text_index < byte_index {
@@ -3955,7 +3959,7 @@ use_glyph_closest_to :: (position: Vector2) -> s64 {
         }
     }
     return cursor;
-} @hook
+}
 Selection :: (style: Style) {
     using context.input;
     using state;
@@ -4023,7 +4027,7 @@ Selection :: (style: Style) {
             }, style), it_index);
         }
     }
-} @component
+}
 Input_Edit :: struct {
     // This is always the start of where the change is done
     where:                   s64;
@@ -4064,7 +4068,7 @@ use_input_state :: (initial_value := "", initial_cursor := 0, initial_selection_
     edit_history.allocator    = allocator;
     undo_history.allocator    = allocator;
     return input_state;
-} @hook
+}
 array_insert_at :: (array: *[..]$T, insertion_index: s64, to_insert: []T) {
     assert(insertion_index >= 0);
     assert(insertion_index <= array.count);
@@ -4313,8 +4317,8 @@ use_input :: () {
     }
 
     if dragging {
-        if !dragging_last_frame.* then selection_anchor = use_glyph_closest_to(get_press_position());
-        mouse_glyph := use_glyph_closest_to(get_mouse_position());
+        if !dragging_last_frame.* then selection_anchor = scope(use_glyph_closest_to(get_press_position()));
+        mouse_glyph := scope(use_glyph_closest_to(get_mouse_position()));
         if mouse_glyph != -1 {
             cursor = mouse_glyph;
             context.input.state.scheduled_scroll_to_cursor = true;
@@ -4322,7 +4326,7 @@ use_input :: () {
     }
     dragging_last_frame.* = dragging;
     if on_click(movement_threshold = true) {
-        mouse_glyph := use_glyph_closest_to(get_mouse_position());
+        mouse_glyph := scope(use_glyph_closest_to(get_mouse_position()));
         if !shift then selection_anchor = -1;
         else if selection_anchor == -1 then selection_anchor = cursor;
         if mouse_glyph != -1 {
@@ -4337,7 +4341,7 @@ use_input :: () {
     if selection_anchor > value.count then selection_anchor = value.count;
     if     on_key_down(.ESCAPE)
         || (selection_anchor == cursor && !dragging) then selection_anchor = -1;
-} @hook
+}
 Caret :: (style: Style) {
     previous_input_node := get_previous_node();
     previous_text_node := get_previous_node(context.input.text_node_index);
@@ -4398,7 +4402,7 @@ Caret :: (style: Style) {
             height     = fixed(line_height),
         }, style));
     }
-} @component
+}
 Input :: (style: Style, input_state: *Input_State, body: Code = "", input_character_filter: Input_Character_Filter = null) -> Input_Context #expand {
     viewport        := get_viewport_size();
     scrolling_state := state(Scrolling_State);
@@ -4423,15 +4427,15 @@ Input :: (style: Style, input_state: *Input_State, body: Code = "", input_charac
             Style.{ z_index = 2, },
             to_string(input_state.value.data, input_state.value.count)
         );
-        Selection(Style.{});
-        Caret(Style.{});
-        use_scrolling(scrolling_state);
-        use_input();
+        scope(Selection(Style.{}));
+        scope(Caret(Style.{}));
+        scope(use_scrolling(scrolling_state));
+        scope(use_input());
 
         #insert body;
     });
     return context.input;
-} @component
+}
 
 SCROLL_MULTIPLIER :: 48; // TO-DO: assess if this value should be 1) dynamic and/or 2) configurable by the user
 Mouse_State :: struct {
@@ -6877,160 +6881,4 @@ prepare_for_next_frame :: () {
     }
 
     frame += 1;
-}
-
-// This introduces a compiler plugin so that users can do +forbear in their compilation command,
-// and automatically get `scope(#code Function(...))` for all of their components or hooks. The proper
-// name is `@scope`, but there's also the two aliases `@component` or @hook` for what people
-// might prefer.
-#import "Compiler";
-COMPILER_PLUGIN_DEBUGGING :: false;
-get_plugin :: () -> *Metaprogram_Plugin {
-    // TO-DO: instead of wrapping the caller with a macro that re-returns the function's return values,
-    // we should instead modify the scope's procedure body to have the scope definition.
-    //
-    // To properly support this, we should pass the scope's location through the context, and thus we will still
-    // need to modify the procedure callers, but just to add a `,, scope_location = #location()`
-    format                          := *context.print_style.default_format_struct;
-    format.use_newlines_if_long_form = true;
-    format.indentation_width         = 4;
-
-    using plugin := New(Metaprogram_Plugin);
-    message       = (plugin: *Metaprogram_Plugin, message: *Message) {
-        if message.kind == .TYPECHECKED {
-            typechecked := cast(*Message_Typechecked) message;
-            #if COMPILER_PLUGIN_DEBUGGING {
-                log_source :: (prefix: string, location: Code_Node.Location) {
-                    #import "File";
-                    if !location.enclosing_load {
-                        return;
-                    }
-                    path := location.enclosing_load.fully_pathed_filename;
-                    source, success := read_entire_file(path, log_errors = false);
-                    if !success {
-                        return;
-                    }
-                    defer free(source);
-
-                    start, end := -1, -1;
-                    line       := 1;
-                    line_start := 0;
-                    for source {
-                        if line == location.l0 && start < 0 {
-                            start = line_start + location.c0 - 1;
-                        }
-                        if line == location.l1 {
-                            end = line_start + location.c1 - 1;
-                            break;
-                        }
-                        if it == #char "\n" {
-                            line      += 1;
-                            line_start = it_index + 1;
-                        }
-                    }
-                    if start < 0 || end < start {
-                        return;
-                    }
-                    print("%: %:%:%: %\n", prefix, path, location.l0, location.c0, string.{end - start, source.data + start});
-                }
-            }
-            for typechecked_body: typechecked.procedure_bodies {
-                body := typechecked_body.expression;
-                if body.body_flags & .ALREADY_MODIFIED {
-                    continue;
-                }
-
-                scope_locations: [..]Code_Node.Location;
-                for typechecked_body.subexpressions if it.kind == .PROCEDURE_CALL {
-                    resolved := (cast(*Code_Procedure_Call) it).resolved_procedure_expression;
-                    if resolved && resolved.kind == .PROCEDURE_HEADER {
-                        // `expected` should be lower cased already
-                        lower_compare :: (actual: string, expected: string) -> bool {
-                            equals := true;
-                            if actual.count == expected.count {
-                                for expected if to_lower(actual[it_index]) != it {
-                                    equals = false;
-                                    break;
-                                }
-                            } else {
-                                equals = false;
-                            }
-                            return equals;
-                        }
-
-                        for note: (cast(*Code_Procedure_Header) resolved).notes if     lower_compare(note.text, "scope")
-                                                                                    || lower_compare(note.text, "component")
-                                                                                    || lower_compare(note.text, "hook") {
-                            #if COMPILER_PLUGIN_DEBUGGING {
-                                log_source("found scope call", it.location);
-                            }
-                            array_add(*scope_locations, it.location);
-                            break;
-                        }
-                    }
-                }
-
-                modified := false;
-                for sub: typechecked_body.subexpressions {
-                    if sub.kind == .PROCEDURE_CALL {
-                        call    := cast(*Code_Procedure_Call) sub;
-                        matches := false;
-                        for scope_locations if memcmp(*it, *call.location, size_of(Code_Node.Location)) == 0 {
-                            matches = true;
-                            break;
-                        }
-                        if matches {
-                            #if COMPILER_PLUGIN_DEBUGGING {
-                                log_source("wrapping in scope", call.location);
-                            }
-                            original  := New(Code_Procedure_Call);
-                            original.* = call.*;
- open_scope_ident         := New(Code_Ident); open_scope_ident.location = call.location;
-                            open_scope_ident.name     = "open_scope";
-
-                            open_scope_call                     := New(Code_Procedure_Call);
-                            open_scope_call.location             = call.location;
-                            open_scope_call.procedure_expression = open_scope_ident;
-
-                            close_scope_ident         := New(Code_Ident);
-                            close_scope_ident.location = call.location;
-                            close_scope_ident.name     = "close_scope";
-
-                            arguments              := NewArray(2, Code_Argument);
-                            arguments[0].expression = open_scope_call;
-                            arguments[1].expression = original;
-
-                            call.*                    = .{};
-                            call.location             = original.location;
-                            call.procedure_expression = close_scope_ident;
-                            call.arguments_unsorted   = arguments;
-
-                            modified = true;
-                        }
-                    } else if sub.kind == .PROCEDURE_HEADER {
-                        // This is meant as a workaround to compiler bug where, a procedure defined inside a #code block looses its body
-                        // after compiler_modify_procedure because the procedure has no body in the syntax tree at that point.
-                        header := cast(*Code_Procedure_Header) sub;
-                        if !header.body_or_null {
-                            for typechecked_body.subexpressions if it.kind == .DECLARATION {
-                                declaration := cast(*Code_Declaration) it;
-                                if declaration.expression && declaration.expression.kind == .PROCEDURE_HEADER {
-                                    inserted := cast(*Code_Procedure_Header) declaration.expression;
-                                    if inserted.body_or_null && memcmp(*inserted.location, *header.location, size_of(Code_Node.Location)) == 0 {
-                                        #if COMPILER_PLUGIN_DEBUGGING {
-                                            log_source("restoring body", header.location);
-                                        }
-                                        header.body_or_null = inserted.body_or_null;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                if modified compiler_modify_procedure(message.workspace, body);
-            }
-        }
-    }
-    return plugin;
 }

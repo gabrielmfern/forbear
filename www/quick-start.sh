@@ -42,7 +42,7 @@ fi
 
 echo "Run: cd $dir"
 if [ "$language" = jai ]; then
-  echo "     $jai main.jai +forbear"
+  echo "     $jai main.jai"
 else
   echo "     ./build.sh"
 fi
