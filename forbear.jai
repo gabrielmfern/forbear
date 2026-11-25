@@ -3833,24 +3833,6 @@ use_spring_transition :: (target: $T, config: Spring_Config(T)) -> T
 Scrolling_State :: struct {
     offset:           Vector2;
     effective_offset: Vector2;
-    scheduled_scroll: Scheduled_Scroll;
-}
-Scheduled_Scroll :: struct {
-    // These are both private values, and they're there for bookkeeping
-    // so that we know when to actually consume this.
-    defined            := false;
-    defined_this_frame := true;
-
-    position           : Vector2;
-    animate            : bool;
-};
-schedule_scroll :: (state: *Scrolling_State, position: Vector2, animate := false) {
-    if !state.scheduled_scroll.defined {
-        state.scheduled_scroll.defined_this_frame = true;
-    }
-    state.scheduled_scroll.defined            = true;
-    state.scheduled_scroll.position           = position;
-    state.scheduled_scroll.animate            = animate;
 }
 use_scrolling :: () {
     scrolling_state := state(Scrolling_State);
@@ -3874,21 +3856,6 @@ use_scrolling :: (using state: *Scrolling_State) {
     previous_node := get_previous_node();
     limit_x := FLOAT32_NAN;
     limit_y := FLOAT32_NAN;
-    if scheduled_scroll.defined && scheduled_scroll.defined_this_frame {
-        scheduled_scroll.defined_this_frame = false;
-    } else if scheduled_scroll.defined && previous_node != null {
-        visible := Vector2.{
-            previous_node.size.x - node.style.padding.x.x - node.style.padding.x.y,
-            previous_node.size.y - node.style.padding.y.x - node.style.padding.y.y,
-        };
-        position := scheduled_scroll.position;
-        if position.x < offset.x                  then offset.x = position.x;
-        else if position.x > offset.x + visible.x then offset.x = position.x - visible.x;
-        if position.y < offset.y                  then offset.y = position.y;
-        else if position.y > offset.y + visible.y then offset.y = position.y - visible.y;
-        if !scheduled_scroll.animate then effective_offset = offset;
-        scheduled_scroll.defined = false;
-    }
     if previous_node != null {
         limit_x = max(  previous_node.content_size.x
                        - previous_node.size.x
@@ -3919,65 +3886,70 @@ use_scrolling :: (using state: *Scrolling_State) {
 } @hook
 find_glyph_index_at_byte :: (glyphs: []Glyph, byte_index: s64) -> s64 {
     glyph_index := 0;
-    while glyph_index < glyphs.count && glyphs[glyph_index].index_into_original_text < byte_index {
+    while glyph_index < glyphs.count && glyphs[glyph_index].text_index < byte_index {
         glyph_index += 1;
     }
     return glyph_index;
 }
-previous_word_boundary :: (glyphs: []Glyph, cursor: s64) -> s64 {
+previous_word_boundary :: (text: string, glyphs: []Glyph, cursor: s64) -> s64 {
     glyph_index := find_glyph_index_at_byte(glyphs, cursor);
 
-    while glyph_index > 0 && is_space(glyphs[glyph_index - 1].utf8.Encoded[0]) { glyph_index -= 1; }
+    while glyph_index > 0 && is_space(text[glyphs[glyph_index - 1].text_index]) { glyph_index -= 1; }
     while glyph_index > 0 {
         glyph_index -= 1;
         if glyphs[glyph_index].starts_word break;
     }
     if glyph_index > 0 {
-        return glyphs[glyph_index].index_into_original_text;
+        return glyphs[glyph_index].text_index;
     } else {
         return 0;
     }
 }
-next_word_boundary :: (glyphs: []Glyph, cursor: s64) -> s64 {
+next_word_boundary :: (text: string, glyphs: []Glyph, cursor: s64) -> s64 {
     glyph_index := find_glyph_index_at_byte(glyphs, cursor);
 
-    while glyph_index < glyphs.count && is_space(glyphs[glyph_index].utf8.Encoded[0]) { glyph_index += 1; }
+    while  glyph_index < glyphs.count
+        && is_space(text[glyphs[glyph_index].text_index]) { glyph_index += 1; }
     if glyph_index < glyphs.count glyph_index += 1;
     while glyph_index < glyphs.count && !glyphs[glyph_index].starts_word { glyph_index += 1; }
     if glyph_index < glyphs.count {
-        return glyphs[glyph_index].index_into_original_text;
+        return glyphs[glyph_index].text_index;
     } else if glyph_index > 0 {
-        return peek(glyphs).index_into_original_text + peek(glyphs).utf8.EncodedLength;
+        return peek(glyphs).text_index + peek(glyphs).byte_count;
     } else {
         return 0;
     }
 }
 use_glyph_closest_to :: (position: Vector2) -> s64 {
     using context.input;
-    glyphs                    := get_node(text_node_index).glyphs;
     previous_text_node := get_previous_node(text_node_index);
-    cursor                    := -1;
+    shaping_run := previous_text_node.shaping_run;
+    cursor := -1;
     if previous_text_node != null {
-        font_units_to_pixel := get_font_units_to_pixel(*context.inter, get_node(text_node_index).style.font_size);
-        line_height         := glyphs.line_height * font_units_to_pixel;
-        closest_distance    : float;
-        for glyphs.array {
-            left_edge := previous_text_node.position.x + it.position.x * font_units_to_pixel;
+        font_units_to_pixel := get_font_units_to_pixel(
+            previous_text_node.style.font,
+            previous_text_node.style.font_size
+        );
+        line_height := shaping_run.line_height * font_units_to_pixel;
+        closest_distance : float;
+        for glyph: shaping_run.glyphs {
+            glyph_position := previous_text_node.glyph_positions[it_index];
+            left_edge := previous_text_node.position.x + glyph_position.x * font_units_to_pixel;
             // TO-DO: to make this work with multiple lines, we will need to have the glyphs already wrapped here,
             // but then we will also need to find the closest line, to finally compare the x coordinates
             distance := Math.abs(left_edge - position.x);
             if it_index == 0 || distance < closest_distance {
                 closest_distance = distance;
-                cursor           = it.index_into_original_text;
+                cursor           = glyph.text_index;
             }
-            if it_index == glyphs.array.count - 1 {
-                right_edge := left_edge + it.advance.x * font_units_to_pixel;
+            if it_index == shaping_run.glyphs.count - 1 {
+                right_edge := left_edge + glyph.advance.x * font_units_to_pixel;
                 // TO-DO: to make this work with multiple lines, we will need to have the glyphs already wrapped here,
                 // but then we will also need to find the closest line, to finally compare the x coordinates
                 distance := Math.abs(right_edge - position.x);
                 if distance < closest_distance {
                     closest_distance = distance;
-                    cursor           = it.index_into_original_text + it.utf8.EncodedLength;
+                    cursor           = glyph.text_index + glyph.byte_count;
                 }
             }
         }
@@ -4064,13 +4036,14 @@ Input_Edit :: struct {
     inserted_index:          s64 = -1;
 }
 Input_State :: struct {
-    value:            [..]u8;
+    value: [..]u8;
     // Firstly used for deleted text, secondly for inserted text on the `undo_history`
-    history_storage:  [..]u8;
-    edit_history:     [..]Input_Edit;
-    undo_history:     [..]Input_Edit;
-    cursor:           s64;
-    selection_anchor: s64            = -1;
+    history_storage: [..]u8;
+    edit_history: [..]Input_Edit;
+    undo_history: [..]Input_Edit;
+    cursor: s64;
+    scheduled_scroll_to_cursor: bool;
+    selection_anchor: s64 = -1;
 }
 use_input_state :: (initial_value := "", initial_cursor := 0, initial_selection_anchor := -1) -> *Input_State {
     input_state, first_frame := state(Input_State.{
@@ -4148,7 +4121,7 @@ delete :: (a: s64, b: s64) {
         array_ordered_remove_interval(*value, start, end - start);
         array_reset_keeping_memory(*undo_history);
         cursor = start;
-        scroll_to_cursor(context.input);
+        context.input.state.scheduled_scroll_to_cursor = true;
     }
     selection_anchor = -1;
 }
@@ -4180,28 +4153,8 @@ append :: (a: s64, b: s64, input: string) {
         array_add(*edit_history, edit);
         array_reset_keeping_memory(*undo_history);
         cursor = start + edit.inserted_length;
-        scroll_to_cursor(context.input);
+        context.input.state.scheduled_scroll_to_cursor = true;
         selection_anchor = -1;
-    }
-}
-scroll_to_cursor :: (input_context: Input_Context, animate := false) {
-    using input_context;
-    using state;
-    text_node := get_node(text_node_index);
-    // TO-DO: how can we have this handling multiline text? This problem of multiline text just becomes dramatically simple in the case
-    // where the width of the text node is well-known, such as when it's fixed.
-    glyphs := shape_text(text_node.style, to_string(value.data));
-    if glyphs.array.count > 0 {
-        font_units_to_pixel := get_font_units_to_pixel(text_node.style.font, text_node.style.font_size);
-        // TO-DO: this is assuming the glyphs map 1:1 to the bytes
-
-        cursor_x: float;
-        if cursor == glyphs.array.count {
-            cursor_x = (peek(glyphs.array).position.x + peek(glyphs.array).advance.x) * font_units_to_pixel;
-        } else {
-            cursor_x = glyphs.array[cursor].position.x * font_units_to_pixel;
-        }
-        schedule_scroll(scrolling_state, Vector2.{ cursor_x, 0 }, animate);
     }
 }
 // To make this hook thing generic for it to be builtin into forbear we need to:
@@ -4209,17 +4162,49 @@ scroll_to_cursor :: (input_context: Input_Context, animate := false) {
 // - we should be moving the cursor by graphemes, not by glyphs
 use_input :: () {
     using context.input.state;
-    shift   := is_key_held(.SHIFT_LEFT)   || is_key_held(.SHIFT_RIGHT);
-    ctrl    := is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
-    alt     := is_key_held(.ALT_LEFT)     || is_key_held(.ALT_RIGHT);
-    super   := is_key_held(.SUPER_LEFT)   || is_key_held(.SUPER_RIGHT);
+    // this is quite a bad experience to doing state. where is the child coming from before this state???
+    dragging_last_frame := state(false);
+    dragging := is_dragging(.LEFT);
+
+    shift := is_key_held(.SHIFT_LEFT) || is_key_held(.SHIFT_RIGHT);
+    ctrl := is_key_held(.CONTROL_LEFT) || is_key_held(.CONTROL_RIGHT);
+    alt := is_key_held(.ALT_LEFT) || is_key_held(.ALT_RIGHT);
+    super := is_key_held(.SUPER_LEFT) || is_key_held(.SUPER_RIGHT);
     command := #ifx OS == .MACOS then super else ctrl;
-    by_word := #ifx OS == .MACOS then alt   else ctrl;
+    by_word := #ifx OS == .MACOS then alt else ctrl;
     by_line := (#ifx OS == .MACOS then super else false) || on_key_down(.HOME) || on_key_down(.END);
 
-    glyphs  := get_node(context.input.text_node_index).glyphs;
+    previous_text_node := get_previous_node(context.input.text_node_index);
+    shaping_run        : Shaping_Run;
+    if previous_text_node != null {
+        shaping_run = previous_text_node.shaping_run;
+    }
 
+    if scheduled_scroll_to_cursor && previous_text_node != null {
+        font_units_to_pixel := get_font_units_to_pixel(
+            previous_text_node.style.font,
+            previous_text_node.style.font_size
+        );
+        cursor_position: Vector2;
+        if cursor == value.count {
+            cursor_position = (  peek(previous_text_node.glyph_positions)
+                               + peek(shaping_run.glyphs).advance) * font_units_to_pixel;
+        } else {
+            glyph_index := find_glyph_index_at_byte(shaping_run.glyphs, cursor);
+            cursor_position = previous_text_node.glyph_positions[cursor] * font_units_to_pixel;
+        }
+        // TO-DO: is this padding required?
+        // cursor_position.x += previous_input_node.style.padding.x.x
+        //                    + previous_input_node.style.border_width.x.x;
+        // cursor_position.y += previous_input_node.style.padding.y.x
+        //                    + previous_input_node.style.border_width.y.x;
+        context.input.scrolling_state.offset = cursor_position;
+        context.input.scrolling_state.effective_offset = cursor_position;
+    }
+
+    // TO-DO: IME support
     append(cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_text_input());
+    value_string := to_string(value.data, value.count);
 
     {
         //
@@ -4235,8 +4220,16 @@ use_input :: () {
         previous := max(cursor - 1, 0);
         next     := min(cursor + 1, value.count);
         if by_word {
-            previous = previous_word_boundary(glyphs.array, cursor);
-            next     = next_word_boundary(glyphs.array, cursor);
+            previous = previous_word_boundary(
+                value_string,
+                shaping_run.glyphs,
+                cursor
+            );
+            next = next_word_boundary(
+                value_string,
+                shaping_run.glyphs,
+                cursor
+            );
         }
         if by_line {
             // TO-DO: to support multiline text here, we need this to go to the start of the current line,
@@ -4251,22 +4244,22 @@ use_input :: () {
             if shift && selection_anchor == -1                       then selection_anchor = cursor;
             if shift || by_word || by_line || selection_anchor == -1 then {
                 cursor = ifx left then previous else next;
-                scroll_to_cursor(context.input);
+                context.input.state.scheduled_scroll_to_cursor = true;
             }
             if !shift                                                then selection_anchor = -1;
         }
 
         if command && on_key_down(.A) {
             selection_anchor = 0;
-            cursor           = value.count;
-            scroll_to_cursor(context.input);
+            cursor = value.count;
+            context.input.state.scheduled_scroll_to_cursor = true;
         }
 
         backspace := on_key_down(.BACKSPACE, on_repeat = true);
         if backspace || on_key_down(.DELETE, on_repeat = true) {
             if selection_anchor != -1 then delete(cursor, selection_anchor);
-            else if backspace         then delete(previous, cursor);
-            else                           delete(cursor, next);
+            else if backspace then delete(previous, cursor);
+            else delete(cursor, next);
         }
     }
 
@@ -4301,7 +4294,7 @@ use_input :: () {
             array_insert_at(*value, edit.where, array_view(history_storage, edit.deleted_index, edit.deleted_length));
         }
         cursor = edit.cursor_before;
-        scroll_to_cursor(context.input);
+        context.input.state.scheduled_scroll_to_cursor = true;
         selection_anchor = edit.selection_anchor_before;
         array_add(*undo_history, edit);
     }
@@ -4314,37 +4307,36 @@ use_input :: () {
             array_insert_at(*value, edit.where, array_view(history_storage, edit.inserted_index, edit.inserted_length));
         }
         cursor = edit.where + edit.inserted_length;
-        scroll_to_cursor(context.input);
+        context.input.state.scheduled_scroll_to_cursor = true;
         selection_anchor = -1;
         array_add(*edit_history, edit);
     }
 
-    dragging            := is_dragging(.LEFT);
-    dragging_last_frame := state(false);
     if dragging {
         if !dragging_last_frame.* then selection_anchor = use_glyph_closest_to(get_press_position());
         mouse_glyph := use_glyph_closest_to(get_mouse_position());
         if mouse_glyph != -1 {
             cursor = mouse_glyph;
-            scroll_to_cursor(context.input, animate = true);
+            context.input.state.scheduled_scroll_to_cursor = true;
         }
     }
     dragging_last_frame.* = dragging;
     if on_click(movement_threshold = true) {
         mouse_glyph := use_glyph_closest_to(get_mouse_position());
-        if !shift                          then selection_anchor = -1;
-        else if selection_anchor == -1     then selection_anchor = cursor;
-        if mouse_glyph != -1               {
+        if !shift then selection_anchor = -1;
+        else if selection_anchor == -1 then selection_anchor = cursor;
+        if mouse_glyph != -1 {
             cursor = mouse_glyph;
-            scroll_to_cursor(context.input, animate = true);
+            context.input.state.scheduled_scroll_to_cursor = true;
         }
     }
     if cursor < 0 || cursor > value.count {
         cursor = clamp(cursor, 0, value.count);
-        scroll_to_cursor(context.input);
+        context.input.state.scheduled_scroll_to_cursor = true;
     }
-    if selection_anchor > value.count                                    then selection_anchor = value.count;
-    if on_key_down(.ESCAPE) || (selection_anchor == cursor && !dragging) then selection_anchor = -1;
+    if selection_anchor > value.count then selection_anchor = value.count;
+    if     on_key_down(.ESCAPE)
+        || (selection_anchor == cursor && !dragging) then selection_anchor = -1;
 } @hook
 Caret :: (style: Style) {
     previous_input_node := get_previous_node();
@@ -4427,12 +4419,14 @@ Input :: (style: Style, input_state: *Input_State, body: Code = "", input_charac
         width           = fixed(250.0),
         children_offset = -scrolling_state.effective_offset,
     }, style), #code {
-        context.input.text_node_index = text(Style.{ z_index = 2, },
-                                             to_string(input_state.value.data, input_state.value.count));
+        context.input.text_node_index = text(
+            Style.{ z_index = 2, },
+            to_string(input_state.value.data, input_state.value.count)
+        );
         Selection(Style.{});
         Caret(Style.{});
         use_scrolling(scrolling_state);
-        // use_input();
+        use_input();
 
         #insert body;
     });
@@ -5472,14 +5466,16 @@ glyph_atlas_fill :: () -> bool {
 }
 
 Glyph :: struct {
-    index:                    s32;
-    index_into_original_text: s32;
-    can_wrap_before:          bool;
+    index: s32;
+    text_index: s32;
+    can_wrap_before: bool;
+    starts_word: bool;
+    byte_count: s32;
 
-    // All of these are in points units, that means they do not account for the font size, but they do account for the
-    // font weight.
+    // All of these are in points units, that means they do not account for the font size, but they
+    // do account for the font weight.
     advance: Vector2;
-    offset:  Vector2;
+    offset: Vector2;
 };
 Shaping_Run :: struct {
     text:              string;
@@ -5551,24 +5547,24 @@ shape_text :: (style: Complete_Style, text: string) -> Shaping_Run {
     if cached_run  return cached_run.*;
     cached_run = table_find_pointer(*shaping_tables[1 - frame % 2], key);
     if cached_run {
-        glyphs:            [..]Glyph;
+        glyphs: [..]Glyph;
         pre_break_indices: [..]s64;
         array_copy(*glyphs, cached_run.glyphs);
         array_copy(*pre_break_indices, cached_run.pre_break_indices);
-        owned_run                  := cached_run.*;
-        owned_run.text              = copy_string(cached_run.text);
-        owned_run.glyphs            = glyphs;
+        owned_run := cached_run.*;
+        owned_run.text = copy_string(cached_run.text);
+        owned_run.glyphs = glyphs;
         owned_run.pre_break_indices = pre_break_indices;
-        key.text                    = owned_run.text;
+        key.text = owned_run.text;
         table_add(shaping_table, key, owned_run);
         return owned_run;
     }
 
     set_weight(font, style.font_weight);
-    font_line_height                       := cast(float) font.raster_face.height;
-    text_wrapping                          := style.text_wrapping;
-    shaping_run                            : Shaping_Run;
-    shaping_run.text                        = copy_string(text);
+    font_line_height := cast(float) font.raster_face.height;
+    text_wrapping := style.text_wrapping;
+    shaping_run : Shaping_Run;
+    shaping_run.text = copy_string(text);
     if #complete key.line_height.kind == {
         case .PERCENTAGE;
             shaping_run.line_height = font_line_height * key.line_height.percentage;
@@ -5620,18 +5616,22 @@ shape_text :: (style: Complete_Style, text: string) -> Shaping_Run {
             utf8.data        = utf8_encoded.Encoded.data;
             utf8.count       = utf8_encoded.EncodedLength;
             is_linebreak    := starts_with(utf8, "\n");
-            can_wrap_before := (shape_codepoint.BreakFlags & xx kbts_break_flags_enum.KBTS_BREAK_FLAG_LINE_SOFT) != 0;
+            can_wrap_before := (shape_codepoint.BreakFlags
+                              & xx kbts_break_flags_enum.KBTS_BREAK_FLAG_LINE_SOFT) != 0;
             if is_linebreak {
                 advance.x  = -pen.x;
                 advance.y += shaping_run.line_height;
                 array_add(*shaping_run.pre_break_indices, shaping_run.glyphs.count);
             } else {
                 glyph: Glyph;
-                glyph.index                    = xx shaping_glyph.Id;
-                glyph.index_into_original_text = xx shape_codepoint.UserId;
-                glyph.can_wrap_before          = can_wrap_before;
-                glyph.advance                  = advance;
-                glyph.offset                   = offset;
+                glyph.index = xx shaping_glyph.Id;
+                glyph.text_index = xx shape_codepoint.UserId;
+                glyph.can_wrap_before = can_wrap_before;
+                glyph.advance = advance;
+                glyph.offset = offset;
+                glyph.byte_count = utf8_encoded.EncodedLength;
+                glyph.starts_word = (shape_codepoint.BreakFlags
+                                   & xx kbts_break_flags_enum.KBTS_BREAK_FLAG_WORD) != 0;
                 array_add(*shaping_run.glyphs, glyph);
             }
 
