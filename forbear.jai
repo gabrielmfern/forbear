@@ -5975,138 +5975,6 @@ GLSL);
 // ======== frame lifecycle functions ========
 //
 
-wrap_and_justify_glyphs :: (node: *Node) {
-    font_units_to_point := get_font_units_to_pixel(node.style.font, node.style.font_size);
-    base := Vector2.{
-        node.style.border_width.x.x + node.style.padding.x.x,
-        node.style.border_width.y.x + node.style.padding.y.x,
-    } / font_units_to_point;
-
-    if node.shaping_run.glyphs.count > 0 && node.style.text_wrapping != .NONE {
-        using node.shaping_run;
-        positions := node.glyph_positions;
-        Line :: struct { start: s64; end: s64; }
-        lines: [..]Line;
-        line_end := ( node.size.x - fitting_base(node, .HORIZONTAL)) / font_units_to_point;
-        pen: Vector2;
-        line_start_index: s64 = 0;
-        break_cursor: s64 = 0;
-        if node.style.text_wrapping == {
-            case .CHARACTER;
-                for *glyph: glyphs {
-                    while  break_cursor < pre_break_indices.count
-                        && pre_break_indices[break_cursor] == it_index {
-                        defer break_cursor += 1;
-                        if it_index > line_start_index {
-                            array_add(*lines, Line.{
-                                start = line_start_index,
-                                end = it_index - 1,
-                            });
-                        }
-                        line_start_index = it_index;
-                        pen.x = 0.0;
-                        pen.y += line_height;
-                    }
-
-                    if pen.x + glyph.advance.x > line_end && it_index > line_start_index {
-                        array_add(*lines, .{
-                            start = line_start_index,
-                            end = it_index - 1,
-                        });
-                        line_start_index = it_index;
-                        pen.x = 0.0;
-                        pen.y += line_height;
-                    }
-
-                    positions[it_index] = base + pen + glyph.offset;
-                    pen += glyph.advance;
-                }
-            case .WORD;
-                last_break: s64 = -1;
-                for *glyph: glyphs {
-                    while  break_cursor < pre_break_indices.count
-                        && pre_break_indices[break_cursor] == it_index {
-                        defer break_cursor += 1;
-                        if it_index > line_start_index {
-                            array_add(*lines, Line.{
-                                start = line_start_index,
-                                end = it_index - 1,
-                            });
-                        }
-                        line_start_index = it_index;
-                        pen.x = 0.0;
-                        pen.y += line_height;
-                        last_break = -1;
-                    }
-
-                    if     glyph.can_wrap_before
-                        && it_index > line_start_index then last_break = it_index;
-
-                    if pen.x + glyph.advance.x > line_end && last_break != -1 {
-                        first_word_x := positions[last_break].x;
-                        array_add(*lines, Line.{
-                            start = line_start_index,
-                            end = last_break - 1,
-                        });
-                        line_start_index = last_break;
-                        pen.x = 0.0;
-                        pen.y += line_height;
-
-                        for reverse_index: last_break..(it_index - 1) {
-                            positions[reverse_index].x -= first_word_x - base.x;
-                            positions[reverse_index].y += line_height;
-
-                            pen += glyphs[reverse_index].advance;
-                        }
-                        last_break = -1;
-                    }
-
-                    positions[it_index] = base + pen + glyph.offset;
-                    pen += glyph.advance;
-                }
-        }
-
-        while break_cursor < pre_break_indices.count {
-            pen.y += line_height;
-            break_cursor += 1;
-        }
-
-        if glyphs.count > 0 {
-            if lines.count > 0 {
-                last_line := lines[lines.count - 1];
-                if last_line.end != glyphs.count - 1 {
-                    array_add(*lines, Line.{
-                        start = last_line.end + 1,
-                        end = glyphs.count - 1,
-                    });
-                }
-            } else {
-                array_add(*lines, Line.{
-                    start = 0,
-                    end = glyphs.count - 1,
-                });
-            }
-        }
-        for line: lines {
-            start_x := positions[line.start].x;
-            end_x := positions[line.end].x + glyphs[line.end].advance.x;
-
-            width := end_x - start_x;
-            line_positions := array_view(positions, line.start, line.end + 1 - line.start);
-            for *position: line_positions {
-                if node.style.x_justification == {
-                    case .START;
-                    case .CENTER;
-                        position.x += (line_end - width) / 2.0;
-                    case .END;
-                        position.x += line_end - width;
-                }
-            }
-        }
-        node.size.y = (pen.y + line_height) * font_units_to_point;
-    }
-}
-
 // Laying out is completely dependent on the fact that the children are appended in the order of parent -> children. If
 // we ever change that, laying out completely changes too, at least in the way it traverses things, but the core algorithms
 // will remain.
@@ -6413,6 +6281,142 @@ layout :: () {
             // ==== wrapping glyphs ====
             //
             for <*node: node_tree if node.kind == .ELEMENT {
+                font_units_to_point := get_font_units_to_pixel(
+                    node.style.font,
+                    node.style.font_size
+                );
+                base := Vector2.{
+                    node.style.border_width.x.x + node.style.padding.x.x,
+                    node.style.border_width.y.x + node.style.padding.y.x,
+                } / font_units_to_point;
+
+                if node.shaping_run.glyphs.count > 0 && node.style.text_wrapping != .NONE {
+                    using node.shaping_run;
+                    positions := node.glyph_positions;
+                    Line :: struct { start: s64; end: s64; }
+                    lines: [..]Line;
+                    line_end := (  node.size.x
+                                 - fitting_base(node, .HORIZONTAL)) / font_units_to_point;
+                    pen: Vector2;
+                    line_start_index: s64 = 0;
+                    break_cursor: s64 = 0;
+                    if node.style.text_wrapping == {
+                        case .CHARACTER;
+                            for *glyph: glyphs {
+                                while  break_cursor < pre_break_indices.count
+                                    && pre_break_indices[break_cursor] == it_index {
+                                    defer break_cursor += 1;
+                                    if it_index > line_start_index {
+                                        array_add(*lines, Line.{
+                                            start = line_start_index,
+                                            end = it_index - 1,
+                                        });
+                                    }
+                                    line_start_index = it_index;
+                                    pen.x = 0.0;
+                                    pen.y += line_height;
+                                }
+
+                                if     pen.x + glyph.advance.x > line_end
+                                    && it_index > line_start_index {
+                                    array_add(*lines, .{
+                                        start = line_start_index,
+                                        end = it_index - 1,
+                                    });
+                                    line_start_index = it_index;
+                                    pen.x = 0.0;
+                                    pen.y += line_height;
+                                }
+
+                                positions[it_index] = base + pen + glyph.offset;
+                                pen += glyph.advance;
+                            }
+                        case .WORD;
+                            last_break: s64 = -1;
+                            for *glyph: glyphs {
+                                while  break_cursor < pre_break_indices.count
+                                    && pre_break_indices[break_cursor] == it_index {
+                                    defer break_cursor += 1;
+                                    if it_index > line_start_index {
+                                        array_add(*lines, Line.{
+                                            start = line_start_index,
+                                            end = it_index - 1,
+                                        });
+                                    }
+                                    line_start_index = it_index;
+                                    pen.x = 0.0;
+                                    pen.y += line_height;
+                                    last_break = -1;
+                                }
+
+                                if     glyph.can_wrap_before
+                                    && it_index > line_start_index then last_break = it_index;
+
+                                if pen.x + glyph.advance.x > line_end && last_break != -1 {
+                                    first_word_x := positions[last_break].x;
+                                    array_add(*lines, Line.{
+                                        start = line_start_index,
+                                        end = last_break - 1,
+                                    });
+                                    line_start_index = last_break;
+                                    pen.x = 0.0;
+                                    pen.y += line_height;
+
+                                    for reverse_index: last_break..(it_index - 1) {
+                                        positions[reverse_index].x -= first_word_x - base.x;
+                                        positions[reverse_index].y += line_height;
+
+                                        pen += glyphs[reverse_index].advance;
+                                    }
+                                    last_break = -1;
+                                }
+
+                                positions[it_index] = base + pen + glyph.offset;
+                                pen += glyph.advance;
+                            }
+                    }
+
+                    while break_cursor < pre_break_indices.count {
+                        pen.y += line_height;
+                        break_cursor += 1;
+                    }
+
+                    if glyphs.count > 0 {
+                        if lines.count > 0 {
+                            last_line := lines[lines.count - 1];
+                            if last_line.end != glyphs.count - 1 {
+                                array_add(*lines, Line.{
+                                    start = last_line.end + 1,
+                                    end = glyphs.count - 1,
+                                });
+                            }
+                        } else {
+                            array_add(*lines, Line.{
+                                start = 0,
+                                end = glyphs.count - 1,
+                            });
+                        }
+                    }
+                    for line: lines {
+                        start_x := positions[line.start].x;
+                        end_x := positions[line.end].x + glyphs[line.end].advance.x;
+
+                        width := end_x - start_x;
+                        line_positions := array_view(positions, line.start,  line.end
+                                                                           + 1
+                                                                           - line.start);
+                        for *position: line_positions {
+                            if node.style.x_justification == {
+                                case .START;
+                                case .CENTER;
+                                    position.x += (line_end - width) / 2.0;
+                                case .END;
+                                    position.x += line_end - width;
+                            }
+                        }
+                    }
+                    node.size.y = (pen.y + line_height) * font_units_to_point;
+                }
             }
         }
 
