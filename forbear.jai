@@ -3848,10 +3848,12 @@ use_scrolling :: () {
         log_error("use_scrolling won't work unless it receives a state itself, or is inside a node that's meant to be the scrolling container.");
     }
 }
-// TO-DO: This must be able to handle choosing between all nodes that can scroll to scroll only one of them.
+// TO-DO: This must be able to handle choosing between all nodes that can scroll to scroll only one
+// of them.
 //
-// Besides only scrolling one of them, once one scrolling container is done with the scrolling and the user keeps
-// scrolling in that direction, the scrolling should go to the next scrolling container with less "precedence".
+// Besides only scrolling one of them, once one scrolling container is done with the scrolling and
+// the user keeps scrolling in that direction, the scrolling should go to the next scrolling
+// container with less "precedence".
 use_scrolling :: (using state: *Scrolling_State) {
     if is_mouse_inside() {
         offset += get_scroll_delta();
@@ -3924,6 +3926,8 @@ next_word_boundary :: (text: string, glyphs: []Glyph, cursor: s64) -> s64 {
         return 0;
     }
 }
+// TO-DO(next): Given this is meant to be a reusable piece that users can make use of in isolation,
+// we should receive everything required from parameters instead of from the context.
 use_glyph_closest_to :: (position: Vector2) -> s64 {
     using context.input;
     previous_text_node := get_previous_node(text_node_index);
@@ -3960,6 +3964,8 @@ use_glyph_closest_to :: (position: Vector2) -> s64 {
     }
     return cursor;
 }
+// TO-DO(next): Given this is meant to be a reusable piece that users can make use of in isolation,
+// we should receive everything required from parameters instead of from the context.
 Selection :: (style: Style) {
     using context.input;
     using state;
@@ -4112,6 +4118,8 @@ Input_Context :: struct {
     input_character_filter: Input_Character_Filter = null;
 };
 #add_context input: Input_Context;
+// TO-DO(next): Given this is meant to be a reusable piece that users can make use of in isolation,
+// we should receive everything required from parameters instead of from the context.
 delete :: (a: s64, b: s64) {
     using context.input;
     using state;
@@ -4133,6 +4141,8 @@ delete :: (a: s64, b: s64) {
     }
     selection_anchor = -1;
 }
+// TO-DO(next): Given this is meant to be a reusable piece that users can make use of in isolation,
+// we should receive everything required from parameters instead of from the context.
 append :: (a: s64, b: s64, input: string) {
     using context.input;
     using state;
@@ -4165,6 +4175,8 @@ append :: (a: s64, b: s64, input: string) {
         selection_anchor = -1;
     }
 }
+// TO-DO(next): Given this is meant to be a reusable piece that users can make use of in isolation,
+// we should receive everything required from parameters instead of from the context.
 Caret :: (style: Style) {
     previous_input_node := get_previous_node();
     previous_text_node := get_previous_node(context.input.text_node_index);
@@ -4226,6 +4238,8 @@ Caret :: (style: Style) {
         }, style));
     }
 }
+// TO-DO(next): Given this is meant to be a reusable piece that users can make use of in isolation,
+// we should receive everything required from parameters instead of from the context.
 use_input :: () {
     using context.input.state;
 
