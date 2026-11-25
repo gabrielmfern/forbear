@@ -4230,6 +4230,7 @@ Caret :: (style: Style) {
         // Gtk does this in every 1.4s, Windows does this every 530ms, and macOS does this every 560ms.
         visible := Math.fmod_cycling(seconds_since_init() - blink_start.*, 1.06) < 0.53;
 
+        // TO-DO(next): hiding the caret when the window loses focus
         element(overwrite(Style.{
             placement  = relative(caret_position),
             background = color(previous_text_node.style.color * rgba(1, 1, 1, ifx visible then 1.0 else 0.0)),
@@ -4240,6 +4241,13 @@ Caret :: (style: Style) {
 }
 // TO-DO(next): Given this is meant to be a reusable piece that users can make use of in isolation,
 // we should receive everything required from parameters instead of from the context.
+// TO-DO(next): Expose event handlers for this that an input element would expose from returned
+// values.
+// TO-DO(next): To handle new line insertion, we should disambiaguate between multiline and single
+// line.
+// TO-DO: Setting the input's value directly won't handle all of the input machinery, so we should
+// include a set_value helper for the input.
+// TO-DO: Support masked inputs (such as a password input).
 use_input :: () {
     using context.input.state;
 
@@ -4276,6 +4284,7 @@ use_input :: () {
         };
         context.input.scrolling_state.offset = offset;
         context.input.scrolling_state.effective_offset = offset;
+        context.input.state.scheduled_scroll_to_cursor = false;
     }
 
     shift := is_key_held(.SHIFT_LEFT) || is_key_held(.SHIFT_RIGHT);
@@ -4287,6 +4296,7 @@ use_input :: () {
     by_line := (#ifx OS == .MACOS then super else false) || on_key_down(.HOME) || on_key_down(.END);
 
     // TO-DO: IME support
+    // TO-DO(next): control characters are currently typed in on macOS and that's unusable
     append(cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_text_input());
     if command && on_key_down(.V, on_repeat = true) {
         append(cursor, ifx selection_anchor == -1 then cursor else selection_anchor, get_clipboard_text());
@@ -4378,7 +4388,13 @@ use_input :: () {
 
         // TO-DO(next): we should be merging undo/redo events based on conditions that make it
         // feel more useful and familiar to people.
-        if command && !shift && on_key_down(.Z, on_repeat = true) && edit_history.count > 0 {
+        undo: bool;
+        #if OS == .WINDOWS {
+            undo = command && on_key_down(.Z, on_repeat = true);
+        } else {
+            undo = command && !shift && on_key_down(.Z, on_repeat = true);
+        }
+        if undo && edit_history.count > 0 {
             edit := pop(*edit_history);
             if edit.inserted_length > 0 {
                 if edit.inserted_index == -1 {
@@ -4402,7 +4418,13 @@ use_input :: () {
             selection_anchor = edit.selection_anchor_before;
             array_add(*undo_history, edit);
         }
-        if command && shift && on_key_down(.Z, on_repeat = true) && undo_history.count > 0 {
+        redo: bool;
+        #if OS == .WINDOWS {
+            redo = command && on_key_down(.Y, on_repeat = true);
+        } else {
+            redo = command && shift && on_key_down(.Z, on_repeat = true);
+        }
+        if redo && undo_history.count > 0 {
             edit := pop(*undo_history);
             if edit.deleted_length > 0 {
                 array_ordered_remove_interval(*value, edit.where, edit.deleted_length);
@@ -4464,15 +4486,16 @@ Input :: (style: Style, input_state: *Input_State, body: Code = "", input_charac
         input_character_filter = input_character_filter,
     };
     element(overwrite(Style.{
-        background      = color(hex("#FFFFFF")),
-        border_color    = hex("#767676"),
-        border_width    = all(1),
-        border_radius   = 2,
-        padding         = in_line(bottom(top(10), 30), 5),
-        direction       = .VERTICAL,
-        text_wrapping   = .NONE,
+        background = color(hex("#FFFFFF")),
+        border_color = hex("#767676"),
+        border_width = all(1),
+        border_radius = 2,
+        padding = in_line(bottom(top(10), 30), 5),
+        cursor = .TEXT
+        direction = .VERTICAL,
+        text_wrapping = .NONE,
         y_justification = .CENTER,
-        width           = fixed(250.0),
+        width = fixed(250.0),
         children_offset = -scrolling_state.effective_offset,
     }, style), #code {
         context.input.text_node_index = text(
