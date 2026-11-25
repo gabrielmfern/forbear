@@ -156,6 +156,26 @@ main :: () {
             shallow_node_assert(5, .ELEMENT, 3);
         });
 
+        test("components called from a macro's own body should get a scope node", #code {
+            Child :: () {
+                element(Style.{width = fixed(10), height = fixed(10)});
+            } @component
+            Box :: () #expand {
+                element(Style.{width = fixed(10), height = fixed(10)}, #code {
+                    Child();
+                });
+            } @component
+
+            Box();
+
+            tree := context.forbear.node_trees[context.forbear.frame % 2];
+            assert(tree.count == 4, "count=%", tree.count);
+            shallow_node_assert(0, .SCOPE, -1);
+            shallow_node_assert(1, .ELEMENT, -1);
+            shallow_node_assert(2, .SCOPE, 1);
+            shallow_node_assert(3, .ELEMENT, 1);
+        });
+
         test("components that return values should work", #code {
             Button :: () -> string {
                 clicked := false;
@@ -206,7 +226,7 @@ main :: () {
                 if lines.count > 0  lines[lines.count - 1].text = builder_to_string(*builder);
                 array_add(*lines, .{ start_x = position.x });
             }
-            append(*builder, to_string(node.shaping_run.text.data + glyph.index_into_original_text, 1));
+            append(*builder, to_string(node.shaping_run.text.data + glyph.text_index, 1));
             lines[lines.count - 1].end_x = position.x + glyph.advance.x;
         }
         if lines.count > 0  lines[lines.count - 1].text = builder_to_string(*builder);
