@@ -1,6 +1,6 @@
 MEMORY_DEBUGGING :: false;
 
-BUILD_FLAGS :: "-output_path .build +Iprof -modules";
+BUILD_FLAGS :: "-output_path .build";
 
 #import "Basic"()(MEMORY_DEBUGGER = MEMORY_DEBUGGING);
 #import "File";
