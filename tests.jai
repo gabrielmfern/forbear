@@ -16,7 +16,7 @@ Root_Component :: () {
 #add_context suites: [..]string;
 main :: () {
     init_backend(*backend);
-    init_window(*backend, *window, 1280, 728, "forbear tests", show_window = false);
+    init_window(*backend, *window, 1280, 728, "forbear tests");
 
     forbear: Forbear;
     frame_arena: Frame_Arena;

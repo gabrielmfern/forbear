@@ -827,17 +827,17 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
 
         running := true;
     };
-    init_window :: (backend: *Windows_GL_Backend,
-                    window:  *Windows_GL_Window,
-                    width:   float64,
-                    height:  float64,
-                    title:   string,
-                    min_width   := FLOAT64_NAN,
-                    min_height  := FLOAT64_NAN,
-                    max_width   := FLOAT64_NAN,
-                    max_height  := FLOAT64_NAN,
-                    // TO-DO: add this to the other platforms
-                    show_window := true) {
+    init_window :: (
+        backend: *Windows_GL_Backend,
+        window: *Windows_GL_Window,
+        width: float64,
+        height: float64,
+        title: string,
+        min_width := FLOAT64_NAN,
+        min_height := FLOAT64_NAN,
+        max_width := FLOAT64_NAN,
+        max_height := FLOAT64_NAN,
+    ) {
         window.text.data = window.text_buffer.data;
         window.backend   = backend;
         value: DWORD;
@@ -856,7 +856,7 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         }
         init_keyboard_state(*window.keyboard_state);
 
-        style :: WS_OVERLAPPEDWINDOW;
+        style :: WS_OVERLAPPEDWINDOW | WS_VISIBLE;
         window.hwnd = CreateWindowExW(
             0,
             utf8_to_wide("forbear",, temp),
@@ -871,9 +871,6 @@ utf16_to_code_point :: (units: []u16, count: s32) -> u32 {
         rectangle   := RECT.{ right = xx (width * window.scale), bottom = xx (height * window.scale) };
         AdjustWindowRectExForDpi(*rectangle, style, 0, 0, dpi);
         SetWindowPos(window.hwnd, null, 0, 0, rectangle.right - rectangle.left, rectangle.bottom - rectangle.top, SWP_NOMOVE | SWP_NOZORDER);
-        if show_window {
-            ShowWindow(window.hwnd, SW_SHOW);
-        }
 
         _, window.hdc = wgl_create_context(window.hwnd, null, 3, 3);
         gl_load(*gl);
