@@ -4333,22 +4333,28 @@ use_input :: () {
             cursor = ifx left then min(cursor, selection_anchor) else max(cursor, selection_anchor);
         }
 
-        // TO-DO(next): these should find the next cursor byte that's at the boundary of another grapheme.
-        previous := max(cursor - 1, 0);
-        // TO-DO(next): these should find the next cursor byte that's at the boundary of another grapheme.
-        next := min(cursor + 1, value.count);
+        previous, next: s64;
+        if shaping_run.glyphs.count > 0 {
+            // TO-DO: we're doing find_glyph_index_at_byte quite a lot. Perhaps we should store it
+            // in a variable and pass it down?
+            glyph_index := find_glyph_index_at_byte(shaping_run.glyphs, cursor);
+
+            previous = max(glyph_index - 1, 0);
+            while previous > 0 && !starts_grapheme(shaping_run.glyphs[previous]) { previous -= 1; }
+            previous = shaping_run.glyphs[previous].text_index;
+
+            next = min(glyph_index + 1, shaping_run.glyphs.count);
+            while  next < shaping_run.glyphs.count
+                && !starts_grapheme(shaping_run.glyphs[next]) { next += 1; }
+            next = ifx next < shaping_run.glyphs.count then
+                shaping_run.glyphs[next].text_index
+            else
+                value.count;
+        }
         if by_word {
             value_string := to_string(value.data, value.count);
-            previous = previous_word_boundary(
-                value_string,
-                shaping_run.glyphs,
-                cursor
-            );
-            next = next_word_boundary(
-                value_string,
-                shaping_run.glyphs,
-                cursor
-            );
+            previous = previous_word_boundary(value_string, shaping_run.glyphs, cursor);
+            next = next_word_boundary(value_string, shaping_run.glyphs, cursor);
         }
         if by_line {
             // TO-DO(next): to support multiline text here, we need this to go to the start of the current line,
@@ -5582,9 +5588,9 @@ Glyph :: struct {
     advance: Vector2;
     offset: Vector2;
 };
-starts_grapheme :: (glyph: Glyph) -> bool { return glyph.break_flags == .GRAPHEME; }
-can_wrap_before :: (glyph: Glyph) -> bool { return glyph.break_flags == .LINE_SOFT; }
-starts_word :: (glyph: Glyph) -> bool { return glyph.break_flags == .WORD; }
+starts_grapheme :: (glyph: Glyph) -> bool { return (glyph.break_flags & .GRAPHEME) != 0; }
+can_wrap_before :: (glyph: Glyph) -> bool { return (glyph.break_flags & .LINE_SOFT) != 0; }
+starts_word :: (glyph: Glyph) -> bool { return (glyph.break_flags & .WORD) != 0; }
 Shaping_Run :: struct {
     text:              string;
     glyphs:            [..]Glyph;
