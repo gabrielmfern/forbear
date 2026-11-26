@@ -3903,7 +3903,7 @@ previous_word_boundary :: (text: string, glyphs: []Glyph, cursor: s64) -> s64 {
     while glyph_index > 0 && is_space(text[glyphs[glyph_index - 1].text_index]) { glyph_index -= 1; }
     while glyph_index > 0 {
         glyph_index -= 1;
-        if glyphs[glyph_index].starts_word break;
+        if starts_word(glyphs[glyph_index]) then break;
     }
     if glyph_index > 0 {
         return glyphs[glyph_index].text_index;
@@ -3917,7 +3917,7 @@ next_word_boundary :: (text: string, glyphs: []Glyph, cursor: s64) -> s64 {
     while  glyph_index < glyphs.count
         && is_space(text[glyphs[glyph_index].text_index]) { glyph_index += 1; }
     if glyph_index < glyphs.count glyph_index += 1;
-    while glyph_index < glyphs.count && !glyphs[glyph_index].starts_word { glyph_index += 1; }
+    while glyph_index < glyphs.count && !starts_word(glyphs[glyph_index]) { glyph_index += 1; }
     if glyph_index < glyphs.count {
         return glyphs[glyph_index].text_index;
     } else if glyph_index > 0 {
@@ -5557,11 +5557,24 @@ glyph_atlas_fill :: () -> bool {
     return true;
 }
 
+// We redefine the type that's already in bindings because the generate_bindings doesn't generate it
+// with enum_flags. Is there a better option?
+Break_Flags :: enum_flags s32 {
+    DIRECTION :: kbts_break_flags_enum.KBTS_BREAK_FLAG_DIRECTION;
+    SCRIPT :: kbts_break_flags_enum.KBTS_BREAK_FLAG_SCRIPT;
+    GRAPHEME :: kbts_break_flags_enum.KBTS_BREAK_FLAG_GRAPHEME;
+    WORD :: kbts_break_flags_enum.KBTS_BREAK_FLAG_WORD;
+    LINE_SOFT :: kbts_break_flags_enum.KBTS_BREAK_FLAG_LINE_SOFT;
+    LINE_HARD :: kbts_break_flags_enum.KBTS_BREAK_FLAG_LINE_HARD;
+    MANUAL :: kbts_break_flags_enum.KBTS_BREAK_FLAG_MANUAL;
+    PARAGRAPH_DIRECTION :: kbts_break_flags_enum.KBTS_BREAK_FLAG_PARAGRAPH_DIRECTION;
+    LINE :: kbts_break_flags_enum.KBTS_BREAK_FLAG_LINE;
+    ANY :: kbts_break_flags_enum.KBTS_BREAK_FLAG_ANY;
+}
 Glyph :: struct {
     index: s32;
     text_index: s32;
-    can_wrap_before: bool;
-    starts_word: bool;
+    break_flags: Break_Flags;
     byte_count: s32;
 
     // All of these are in points units, that means they do not account for the font size, but they
@@ -5569,6 +5582,9 @@ Glyph :: struct {
     advance: Vector2;
     offset: Vector2;
 };
+starts_grapheme :: (glyph: Glyph) -> bool { return glyph.break_flags == .GRAPHEME; }
+can_wrap_before :: (glyph: Glyph) -> bool { return glyph.break_flags == .LINE_SOFT; }
+starts_word :: (glyph: Glyph) -> bool { return glyph.break_flags == .WORD; }
 Shaping_Run :: struct {
     text:              string;
     glyphs:            [..]Glyph;
@@ -5695,8 +5711,15 @@ shape_text :: (style: Complete_Style, text: string) -> Shaping_Run {
         shaping_glyph: *kbts_glyph;
         while (kbts_GlyphIteratorNext(*run.Glyphs, *shaping_glyph) != 0) {
             shape_codepoint: kbts_shape_codepoint;
-            if kbts_ShapeGetShapeCodepoint(shaping_context, shaping_glyph.UserIdOrCodepointIndex, *shape_codepoint) == 0 {
-                log_error("Could not get original codeopint for glyph with user id %", shaping_glyph.UserIdOrCodepointIndex);
+            if kbts_ShapeGetShapeCodepoint(
+                shaping_context,
+                shaping_glyph.UserIdOrCodepointIndex,
+                *shape_codepoint
+            ) == 0 {
+                log_error(
+                    "Could not get original codeopint for glyph with user id %",
+                    shaping_glyph.UserIdOrCodepointIndex
+                );
                 continue;
             }
 
@@ -5718,12 +5741,10 @@ shape_text :: (style: Complete_Style, text: string) -> Shaping_Run {
                 glyph: Glyph;
                 glyph.index = xx shaping_glyph.Id;
                 glyph.text_index = xx shape_codepoint.UserId;
-                glyph.can_wrap_before = can_wrap_before;
                 glyph.advance = advance;
                 glyph.offset = offset;
                 glyph.byte_count = utf8_encoded.EncodedLength;
-                glyph.starts_word = (shape_codepoint.BreakFlags
-                                   & xx kbts_break_flags_enum.KBTS_BREAK_FLAG_WORD) != 0;
+                glyph.break_flags = xx shape_codepoint.BreakFlags;
                 array_add(*shaping_run.glyphs, glyph);
             }
 
@@ -6402,7 +6423,7 @@ layout :: () {
                                     last_break = -1;
                                 }
 
-                                if     glyph.can_wrap_before
+                                if     can_wrap_before(glyph)
                                     && it_index > line_start_index then last_break = it_index;
 
                                 if pen.x + glyph.advance.x > line_end && last_break != -1 {
